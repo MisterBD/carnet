@@ -1,0 +1,15 @@
+# secrets et état local : jamais versionnés
+.env
+secrets/
+.etat/
+*.key
+# dépendances et constructions
+node_modules/
+web/dist/
+web/dist-outils/
+artefacts/kit/
+artefacts/.cache-kit/
+__pycache__/
+*.pyc
+*.log
+.DS_Store

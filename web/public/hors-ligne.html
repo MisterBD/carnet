@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)" />
+<meta name="color-scheme" content="light dark" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Pas de connexion · Carnet</title>
+<!-- Écran de repli du service worker : une page autonome (aucun bundle), servie seulement quand le réseau manque.
+     CSP de l'appli : styles en ligne permis, scripts uniquement 'self' (donc /hors-ligne.js, pas de script en ligne). -->
+<style>
+@font-face { font-family: "Literata"; src: url("/polices/literata-opsz.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+@font-face { font-family: "Atkinson Next"; src: url("/polices/atkinson-next.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+:root {
+  color-scheme: light dark;
+  --fond: #fbfbfa; --encre: #1c2129; --encre-2: #4a5261; --encre-3: #5a6270; --surface: #f3f4f1; --surface-2: #eceeea; --trait: #e7e8e4;
+  --indigo: #2d4f86; --indigo-fonce: #213c68; --sur-accent: #fff; --ambre: #8a5a0b; --ambre-fond: #fbf0dc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #12161c; --encre: #e5e8ec; --encre-2: #b3bac5; --encre-3: #8a93a1; --surface: #1c222b; --surface-2: #232a34; --trait: #252c36;
+    --indigo: #8fb2ea; --indigo-fonce: #b7cdf2; --sur-accent: #0f1620; --ambre: #f0c37a; --ambre-fond: #3a2c12;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--fond); }
+body {
+  min-height: 100dvh; display: grid; place-items: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  color: var(--encre); font: 16px/1.5 "Atkinson Next", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; overscroll-behavior-y: none;
+}
+main { width: min(100%, 380px); display: flex; flex-direction: column; align-items: center; text-align: center; }
+.sceau { width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center; background: var(--surface-2); color: var(--encre-3); margin-bottom: 28px; }
+h1 { text-wrap: balance; margin: 0 0 8px; font: 600 28px/1.2 "Literata", ui-serif, "New York", Georgia, serif; letter-spacing: -0.015em; }
+.question { margin: 0 0 6px; font-size: 19px; font-weight: 600; color: var(--encre); }
+.aide { margin: 0 0 28px; color: var(--encre-2); max-width: 32ch; }
+button {
+  font: inherit; font-weight: 600; font-size: 17px; height: 50px; min-width: 200px; padding: 0 28px; border: 0; border-radius: 12px;
+  background: var(--indigo); color: var(--sur-accent); cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background 120ms, transform 100ms;
+}
+button:active { transform: scale(0.98); }
+button[disabled] { opacity: 0.7; cursor: default; }
+@media (hover: hover) { button:not([disabled]):hover { background: var(--indigo-fonce); } }
+:focus-visible { outline: 2px solid var(--indigo); outline-offset: 3px; }
+.etat { min-height: 24px; margin: 16px 0 0; font-size: 15px; color: var(--encre-3); }
+.etat[data-ton="ambre"] { color: var(--ambre); }
+.vague { display: block; margin-top: 36px; color: var(--encre-3); opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="sceau" aria-hidden="true">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+      <path d="M3 9.5c2.2-3 4.8-3 7 0s4.8 3 7 0 2.8-2.2 4-1.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+      <path d="M3 15.5c2.2-3 4.8-3 7 0s4.8 3 7 0 2.8-2.2 4-1.2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="1 5" />
+    </svg>
+  </div>
+  <h1>Pas de connexion au carnet</h1>
+  <p class="question" id="question">Vérifie ta connexion (VPN, réseau privé, proxy), puis réessaie.</p>
+  <p class="aide" id="aide">Dès que Carnet répond de nouveau, la page se rouvre toute seule.</p>
+  <button type="button" id="reessayer">Réessayer</button>
+  <p class="etat" id="etat" role="status" aria-live="polite"></p>
+  <svg class="vague" width="96" height="10" viewBox="0 0 96 10" fill="none" aria-hidden="true"><path d="M1 5c2-3.5 4-3.5 6 0s4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+</main>
+<script src="/hors-ligne.js"></script>
+</body>
+</html>

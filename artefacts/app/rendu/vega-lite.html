@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rendu Vega-Lite</title>
+<meta name="description" content="Page de rendu isolée : reçoit {type:'vega-lite', spec} par postMessage et dessine le graphique.">
+<link rel="stylesheet" href="/kit/fonts/fonts.css?v={{KIT_V}}">
+<style>
+  :root { color-scheme: light; }
+  :root[data-theme="sombre"] { color-scheme: dark; }
+  html, body { margin: 0; background: transparent; }
+  body { font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; padding: 8px; color: #1d1d1f; }
+  :root[data-theme="sombre"] body { color: #e8e8ea; }
+  #sortie { width: 100%; overflow: hidden; }
+  #sortie .vega-embed { width: 100%; }
+  #sortie svg { max-width: 100%; }
+  #erreur { margin: 8px 0; padding: 10px 12px; border-radius: 6px; font: 13px/1.4 ui-monospace, monospace; white-space: pre-wrap;
+            background: #fdecea; color: #7a1c14; border: 1px solid #f5c2bd; }
+  :root[data-theme="sombre"] #erreur { background: #3a1b18; color: #ffb4a9; border-color: #6b2f28; }
+</style>
+</head>
+<body>
+<div id="sortie" role="img" aria-label="Graphique"></div>
+<pre id="erreur" role="alert" hidden></pre>
+<script src="/kit/vega/vega.min.js?v={{KIT_V}}"></script>
+<script src="/kit/vega-lite/vega-lite.min.js?v={{KIT_V}}"></script>
+<script src="/kit/vega-embed/vega-embed.min.js?v={{KIT_V}}"></script>
+<script src="/kit/vega-interpreter/vega-interpreter.js?v={{KIT_V}}"></script>
+<script src="/kit/pont.js?v={{KIT_V}}"></script>
+<script>
+(function () {
+  'use strict';
+  var TYPE = 'vega-lite';
+  var MAX_SPEC = 1000000;
+  var hote = window.parent;
+  var derniere = null;
+  var compteur = 0;
+  var vue = null;
+  var sortie = document.getElementById('sortie');
+  var erreur = document.getElementById('erreur');
+
+  function dire(msg) { NotesPont.envoyer(msg); }
+
+  // Aucun chargement réseau : la CSP l'interdit déjà (connect-src 'none'), on échoue ici avec un message clair.
+  var refus = [];
+  function refuser() {
+    var e = new Error("chargement externe interdit : fournir les données dans data.values");
+    refus.push(e.message);       // Vega n'avertit que dans la console : on remonte l'échec à l'hôte
+    return Promise.reject(e);
+  }
+  var chargeurFerme = { load: refuser, sanitize: refuser, http: refuser, file: refuser };
+
+  function montrerErreur(texte) {
+    if (vue) { try { vue.finalize(); } catch (e) {} vue = null; }
+    sortie.textContent = '';
+    erreur.textContent = String(texte).slice(0, 600);
+    erreur.hidden = false;
+    dire({ type: 'rendu:erreur', message: String(texte).slice(0, 300) });
+    NotesPont.hauteur();
+  }
+
+  // Refus déterministe en amont : toute propriété « url » (data.url, lookup, image…) est une demande de chargement externe.
+  function contientUrl(v, profondeur) {
+    if (profondeur > 40 || v === null || typeof v !== 'object') return false;
+    for (var k in v) {
+      if (k === 'url' && typeof v[k] === 'string') return true;
+      if (contientUrl(v[k], profondeur + 1)) return true;
+    }
+    return false;
+  }
+
+  function preparer(spec) {
+    var s = JSON.parse(JSON.stringify(spec));       // copie : on ne modifie pas la spec de l'hôte
+    var unitOuCouches = !!(s.mark || s.layer);
+    if (unitOuCouches && s.width === undefined) {   // s'adapte à la largeur du cadre (mobile compris)
+      s.width = 'container';
+      if (s.autosize === undefined) s.autosize = { type: 'fit', contains: 'padding' };
+    }
+    return s;
+  }
+
+  async function rendre() {
+    if (derniere === null) return;
+    erreur.hidden = true;
+    var n = ++compteur;
+    refus = [];
+    try {
+      if (contientUrl(derniere, 0)) throw new Error("chargement externe interdit : fournir les données dans data.values");
+      var sombre = NotesPont.theme() === 'sombre';
+      var res = await vegaEmbed(sortie, preparer(derniere), {
+        actions: false,
+        renderer: 'svg',
+        mode: 'vega-lite',
+        theme: sombre ? 'dark' : undefined,
+        config: { background: 'transparent', font: 'Roboto, system-ui, sans-serif' },
+        ast: true,                                  // pas d'eval : expressions interprétées par vega-interpreter
+        expr: vega.expressionInterpreter,
+        loader: chargeurFerme
+      });
+      await new Promise(function (r) { setTimeout(r, 60); });   // laisse Vega signaler un chargement refusé, asynchrone
+      if (n !== compteur) { res.finalize(); return; }
+      if (refus.length) { res.finalize(); montrerErreur(refus[0]); return; }
+      if (vue) { try { vue.finalize(); } catch (e) {} }
+      vue = res.view;
+      dire({ type: 'rendu:ok' });
+    } catch (e) {
+      if (n === compteur) montrerErreur((e && e.message) || e);
+      return;
+    }
+    NotesPont.hauteur();
+  }
+
+  window.addEventListener('resize', function () { if (vue) { try { vue.resize().run(); } catch (e) {} } });
+
+  window.addEventListener('message', function (e) {
+    if (e.source !== hote) return;                  // l'hôte n'est reconnu que par source, jamais par origin
+    var m = e.data;
+    if (!m || typeof m !== 'object') return;
+    if (m.type !== TYPE) return;
+    var spec = m.spec;
+    try {
+      if (typeof spec === 'string') {
+        if (spec.length > MAX_SPEC) throw new Error('spec trop grosse');
+        spec = JSON.parse(spec);
+      }
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('spec Vega-Lite invalide (objet JSON requis)');
+      if (JSON.stringify(spec).length > MAX_SPEC) throw new Error('spec trop grosse (1 Mo max)');
+    } catch (err) { montrerErreur(err.message); return; }
+    derniere = spec;
+    var t = (m.theme === 'clair' || m.theme === 'sombre') ? m.theme : null;
+    if (t && t !== NotesPont.theme()) NotesPont.definirTheme(t);   // le rappel surTheme relance rendre()
+    else rendre();
+  });
+  NotesPont.surTheme(function () { if (derniere !== null) rendre(); });
+
+  dire({ type: 'rendu:pret', rendu: TYPE });
+})();
+</script>
+</body>
+</html>

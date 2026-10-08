@@ -1,0 +1,5 @@
+tests
+kit
+.cache-kit
+__pycache__
+*.pyc

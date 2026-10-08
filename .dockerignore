@@ -1,0 +1,12 @@
+**/node_modules
+web/dist
+web/dist-outils
+.git
+.github
+.env
+.etat
+secrets
+docs
+demo
+tests
+**/__pycache__

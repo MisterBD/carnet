@@ -1,0 +1,130 @@
+# Carnet : deux services, chacun sur son propre réseau, chacun publié sur 127.0.0.1 seulement.
+#   carnet     l'application (pages Markdown, API, interface)                                  http://127.0.0.1:3020
+#   artefacts  le serveur d'artefacts isolés (HTML écrit par les agents, schémas, graphiques)  http://127.0.0.1:3006
+# Démarrage : ./scripts/initialiser.sh puis docker compose up -d --build. Réglages : .env (modèle : .env.example).
+# Pour joindre Carnet depuis d'autres appareils, voir docs/deploiement.md : un proxy qui AUTHENTIFIE devant 127.0.0.1:3020.
+# N'expose jamais ces ports sans authentification en amont.
+
+name: carnet
+
+x-durcissement: &durcissement
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=8m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "5m"
+      max-file: "3"
+
+services:
+  carnet:
+    <<: *durcissement
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: carnet-app:local
+    init: true
+    # Même utilisateur que le propriétaire du dossier de pages et de la clé (renseigné par scripts/initialiser.sh).
+    user: "${CARNET_UID:-1000}:${CARNET_GID:-1000}"
+    ports:
+      - "127.0.0.1:${CARNET_PORT_HOTE:-3020}:3020"
+    environment:
+      CARNET_ESPACE: /espace
+      CARNET_NOM_ESPACE: "${CARNET_NOM_ESPACE:-demo}"
+      CARNET_PRENOM: "${CARNET_PRENOM:-Camille}"
+      # Défaut : @ + le prénom (une valeur vide désactiverait la détection, d'où ce défaut explicite).
+      CARNET_MENTIONS: "${CARNET_MENTIONS:-@${CARNET_PRENOM:-Camille}}"
+      CARNET_MASQUES: "${CARNET_MASQUES:-}"
+      CARNET_PORT: "3020"
+      # 0.0.0.0 DANS le conteneur ; le port n'est publié que sur 127.0.0.1 de l'hôte (voir « ports »).
+      CARNET_HOTE: "0.0.0.0"
+      CARNET_STATIQUE: /app/web/dist
+      # Identité : posée par le proxy authentifiant (Tailscale Serve, oauth2-proxy, Authelia…), jamais par le navigateur.
+      CARNET_UTILISATEURS_AUTORISES: "${CARNET_UTILISATEURS_AUTORISES:-}"
+      CARNET_ENTETE_IDENTITE: "${CARNET_ENTETE_IDENTITE:-Tailscale-User-Login}"
+      CARNET_ENTETE_NOM: "${CARNET_ENTETE_NOM:-Tailscale-User-Name}"
+      # 1 = requêtes sans identité acceptées. Essai local seulement : le serveur refuse ce mode avec une origine non locale.
+      CARNET_DEV: "${CARNET_DEV:-0}"
+      # Table « origine de l'application = base des artefacts » (même valeur pour les deux services).
+      CARNET_ORIGINES_ARTEFACTS: "${CARNET_ORIGINES_ARTEFACTS:-http://127.0.0.1:3020=http://127.0.0.1:3006 http://localhost:3020=http://127.0.0.1:3006}"
+      CARNET_CLE: /run/secrets/art-hmac.key
+      CARNET_ART_TTL: "900"
+      # État hors des pages : favoris et instantanés de l'historique.
+      CARNET_ETAT: /etat
+      # Corbeille : jours avant l'effacement automatique (0 : jamais).
+      CARNET_CORBEILLE_JOURS: "${CARNET_CORBEILLE_JOURS:-30}"
+      # Historique git (lecture seule) : auto, non, ou chemin d'un dossier git monté en lecture seule (voir docs/deploiement.md).
+      CARNET_GIT: "${CARNET_GIT:-auto}"
+      CARNET_GIT_PREFIXE: "${CARNET_GIT_PREFIXE:-}"
+      # Textes des écrans hors ligne et d'erreur (facultatifs) : réseau privé à allumer, personne à prévenir.
+      CARNET_RESEAU: "${CARNET_RESEAU:-}"
+      CARNET_CONTACT: "${CARNET_CONTACT:-}"
+      TZ: "${TZ:-Europe/Paris}"
+    volumes:
+      # Les pages (la vérité) en lecture-écriture. Défaut : l'espace de démonstration du dépôt.
+      - "${CARNET_ESPACE_HOTE:-./demo}:/espace"
+      # Clé de signature des liens d'artefacts : générée par scripts/initialiser.sh (chmod 600), partagée en lecture seule.
+      - "./secrets/art-hmac.key:/run/secrets/art-hmac.key:ro"
+      # État hors des pages (favoris, instantanés).
+      - "./.etat:/etat"
+    mem_limit: 192m
+    memswap_limit: 192m
+    cpus: 0.5
+    pids_limit: 64
+    stop_grace_period: 5s
+    # Réseau DÉDIÉ : l'identité vient d'un en-tête que n'importe quel conteneur voisin pourrait forger.
+    networks:
+      - carnet
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3020/sante"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  artefacts:
+    <<: *durcissement
+    build:
+      context: ./artefacts
+      dockerfile: Dockerfile
+    image: carnet-artefacts:local
+    user: "${CARNET_UID:-1000}:${CARNET_GID:-1000}"
+    ports:
+      - "127.0.0.1:${ART_PORT_HOTE:-3006}:3006"
+    environment:
+      ART_LISTEN_HOST: "0.0.0.0"
+      ART_LISTEN_PORT: "3006"
+      # Origine publique des artefacts par défaut (Host inconnu) : la première base de la table ci-dessous si tu ne la fixes pas.
+      ART_PUBLIC_BASE: "${CARNET_ART_BASE:-http://127.0.0.1:3006}"
+      # Origines qui peuvent embarquer un artefact dans un cadre : déduites de la table.
+      APP_ORIGINS: ""
+      ART_ORIGINES: "${CARNET_ORIGINES_ARTEFACTS:-http://127.0.0.1:3020=http://127.0.0.1:3006 http://localhost:3020=http://127.0.0.1:3006}"
+      ART_TTL: "900"
+      ART_ROOT: /data/artefacts
+      KIT_ROOT: /kit
+      ART_HMAC_KEY_FILE: /run/secrets/art-hmac.key
+    volumes:
+      # Seul le dossier artefacts/ des pages est visible, en LECTURE SEULE.
+      - "${CARNET_ESPACE_HOTE:-./demo}/artefacts:/data/artefacts:ro"
+      - "./secrets/art-hmac.key:/run/secrets/art-hmac.key:ro"
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 128
+    networks:
+      - artefacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:3006/sante',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  carnet: {}
+  artefacts: {}
