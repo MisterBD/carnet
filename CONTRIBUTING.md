@@ -62,6 +62,25 @@ Toute modification de l'éditeur repasse aussi le banc de fidélité : `(cd web 
 - **Aucune ressource externe** : ni CDN, ni police distante, ni télémétrie, ni appel réseau sortant du serveur. Tout est servi localement.
 - Un changement dans `server/src/securite.ts`, `server/src/art.ts` ou `artefacts/app/art.py` doit être accompagné de tests, y compris négatifs (le chemin piégé doit toujours être refusé).
 
+## Revue de sécurité de chaque pull request
+
+Carnet affiche des pages écrites par des agents qui lisent des contenus non fiables : une faille y coûte cher. **Chaque pull request reçoit une revue de sécurité avant d'être fusionnée**, sans exception, y compris les mises à jour de dépendances proposées par Dependabot et les changements qui ne touchent que la documentation.
+
+- La branche `main` est protégée : on n'y entre que par une pull request, avec la CI verte et l'approbation du mainteneur. Les fusions se font en *squash*.
+- Pour une première contribution, la CI ne démarre qu'après l'accord du mainteneur (règle de GitHub pour les contributions venues d'un fork).
+- La revue regarde au minimum :
+  - les secrets ;
+  - les dépendances ajoutées ou changées (licence, provenance, scripts d'installation, fichiers de verrouillage) ;
+  - toute nouvelle sortie réseau ou ressource externe ;
+  - la CSP, le confinement des chemins, l'anti-CSRF et le contrôle d'identité ;
+  - le rendu du contenu des pages (rien ne doit devenir exécutable) ;
+  - les fichiers `Dockerfile`, `compose.yml`, `scripts/` et `.github/` ;
+  - les tests négatifs.
+- Le code d'une pull request n'est jamais exécuté hors de la CI de GitHub ou d'un bac à sable isolé (conteneur sans réseau ni secret).
+- La revue est écrite sur la pull request. Une remarque de sécurité se règle avant la fusion, jamais « dans une prochaine PR ».
+
+Les petites pull requests, centrées sur un seul sujet, sont revues bien plus vite.
+
 ## Licences : la règle la plus stricte du projet
 
 Carnet est sous [licence MIT](LICENSE). Pour que ça reste vrai :
