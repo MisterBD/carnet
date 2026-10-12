@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Bold, Italic, Underline, Strikethrough, Code, Highlighter, Baseline, Link2, ChevronDown, ExternalLink, Pencil, Unlink,
   Check, Search, BetweenHorizontalEnd, BetweenVerticalEnd, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Trash2,
+  Bookmark, TextCursorInput,
 } from "lucide-react";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/core";
@@ -13,6 +14,7 @@ import { usePosition } from "./position";
 import { colorerSelection, transformer, blocCourant, type Cible } from "../blocs";
 import { LANGUES } from "../langues";
 import { plier } from "../../../../shared/page.ts";
+import { enLien, enSignet, estAdresse, estSignet } from "../signet";
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const m = mac ? "⌘" : "Ctrl+";
@@ -152,6 +154,10 @@ export function EditionLien({ magasin }: { magasin: Magasin }) {
 
   if (!lien || !ed) return null;
   const fermer = () => { magasin.maj({ lien: null }); };
+  // lot 4 : une adresse seule peut s'afficher en signet (carte), et un signet redevenir un lien dans le texte
+  const $l = lien.from < lien.to && lien.to <= ed.state.doc.content.size ? ed.state.doc.resolve(lien.from) : null;
+  const signet = $l && $l.depth >= 1 && estSignet($l.parent) ? $l.before() : null;
+  const adresseSeule = $l && signet === null && estAdresse(ed.state.doc.textBetween(lien.from, lien.to)) && ed.state.doc.textBetween(lien.from, lien.to) === lien.href;
   const appliquer = () => {
     const url = normaliserUrl(valeur);
     const { from, to } = lien;
@@ -185,6 +191,14 @@ export function EditionLien({ magasin }: { magasin: Magasin }) {
           <a className="carnet-lien__url" href={lien.href} target="_blank" rel="noopener noreferrer" title={lien.href}>
             <ExternalLink size={15} /> <span>{lien.href.replace(/^https?:\/\//, "").slice(0, 48) || "Lien"}</span>
           </a>
+          {signet !== null && (
+            <button type="button" className="carnet-lien__bouton" onPointerDown={garderFocus} aria-label="Afficher en lien dans le texte" title="Afficher en lien"
+              onClick={() => { fermer(); enLien(ed, signet); }}><TextCursorInput size={16} /></button>
+          )}
+          {adresseSeule && (
+            <button type="button" className="carnet-lien__bouton" onPointerDown={garderFocus} aria-label="Afficher en signet" title="Afficher en signet"
+              onClick={() => { fermer(); enSignet(ed, lien.from, lien.to); }}><Bookmark size={16} /></button>
+          )}
           <button type="button" className="carnet-lien__bouton" onPointerDown={garderFocus} onClick={() => magasin.maj({ lien: { ...lien, edition: true } })} aria-label="Modifier le lien" title="Modifier"><Pencil size={16} /></button>
           <button type="button" className="carnet-lien__bouton" onPointerDown={garderFocus} aria-label="Retirer le lien" title="Retirer le lien"
             onClick={() => { ed.chain().focus().setTextSelection({ from: lien.from, to: lien.to }).unsetLink().setTextSelection(lien.to).run(); fermer(); }}><Unlink size={16} /></button>

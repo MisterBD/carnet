@@ -12,7 +12,13 @@ export function zoneVisible(): { x: number; y: number; width: number; height: nu
   return { x: vv.offsetLeft, y: vv.offsetTop, width: vv.width, height: vv.height - barre };
 }
 
-export function usePosition(ref: RefObject<HTMLElement | null>, ancre: Rect | null, placement: Placement = "bottom-start", ecart = 6, dep: unknown = null) {
+/**
+ * `plafond` (facultatif) : hauteur maximale du menu. Quand il est donné, la hauteur disponible est appliquée AU MENU
+ * pendant le calcul (min(disponible, plafond)) : Floating UI recalcule alors la position avec cette hauteur. Sans cela,
+ * un long menu (menu « / » : plus de 25 entrées) était mesuré à sa hauteur naturelle, basculé au-dessus de l'ancre et
+ * placé hors de l'écran (intégration V3 : vu sur iPhone avec les entrées des lots 2 et 3).
+ */
+export function usePosition(ref: RefObject<HTMLElement | null>, ancre: Rect | null, placement: Placement = "bottom-start", ecart = 6, dep: unknown = null, plafond?: number) {
   const [pos, setPos] = useState<{ x: number; y: number; hMax: number } | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -31,10 +37,16 @@ export function usePosition(ref: RefObject<HTMLElement | null>, ancre: Rect | nu
           fallbackPlacements: placement.startsWith("top") ? ["bottom-start", "top-end", "bottom-end"] : ["top-start", "bottom-end", "top-end"],
         }),
         shift({ padding: 8, boundary: { ...zoneVisible() } as never }),
-        size({ padding: 8, boundary: { ...zoneVisible() } as never, apply: ({ availableHeight }) => { hMax = Math.max(140, Math.floor(availableHeight)); } }),
+        size({
+          padding: 8, boundary: { ...zoneVisible() } as never,
+          apply: ({ availableHeight, elements }) => {
+            hMax = Math.max(140, Math.floor(availableHeight));
+            if (plafond) elements.floating.style.maxHeight = `${Math.min(hMax, plafond)}px`;
+          },
+        }),
       ],
     }).then(({ x, y }) => { if (!annule) setPos({ x, y, hMax }); });
     return () => { annule = true; };
-  }, [ref, ancre?.left, ancre?.top, ancre?.width, ancre?.height, placement, ecart, dep]);
+  }, [ref, ancre?.left, ancre?.top, ancre?.width, ancre?.height, placement, ecart, dep, plafond]);
   return pos;
 }

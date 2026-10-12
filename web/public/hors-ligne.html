@@ -49,6 +49,15 @@ button[disabled] { opacity: 0.7; cursor: default; }
 .etat { min-height: 24px; margin: 16px 0 0; font-size: 15px; color: var(--encre-3); }
 .etat[data-ton="ambre"] { color: var(--ambre); }
 .vague { display: block; margin-top: 36px; color: var(--encre-3); opacity: 0.55; }
+/* Lot 5 « Fiabilité » : saisies non enregistrées gardées dans ce navigateur (titres seulement, texte copiable) */
+.brouillons { width: 100%; margin-top: 24px; padding: 14px 16px; border-radius: 12px; background: var(--ambre-fond); color: var(--ambre); text-align: left; }
+.brouillons__titre { margin: 0 0 8px; font-weight: 600; }
+.brouillons ul { list-style: none; margin: 0; padding: 0; }
+.brouillons li { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.brouillons li + li { border-top: 1px solid currentColor; border-top-color: color-mix(in srgb, currentColor 25%, transparent); }
+.brouillons .nom { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--encre); }
+.brouillons button { height: 44px; min-width: 0; padding: 0 16px; font-size: 15px; background: transparent; color: var(--ambre); border: 1px solid currentColor; }
+@media (hover: hover) { .brouillons button:not([disabled]):hover { background: transparent; text-decoration: underline; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -65,6 +74,10 @@ button[disabled] { opacity: 0.7; cursor: default; }
   <p class="aide" id="aide">Dès que Carnet répond de nouveau, la page se rouvre toute seule.</p>
   <button type="button" id="reessayer">Réessayer</button>
   <p class="etat" id="etat" role="status" aria-live="polite"></p>
+  <section class="brouillons" id="brouillons" hidden aria-labelledby="brouillons-titre">
+    <p class="brouillons__titre" id="brouillons-titre">Non enregistré : gardé dans ce navigateur</p>
+    <ul id="brouillons-liste"></ul>
+  </section>
   <svg class="vague" width="96" height="10" viewBox="0 0 96 10" fill="none" aria-hidden="true"><path d="M1 5c2-3.5 4-3.5 6 0s4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0 4 3.5 6 0 4-3.5 6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 </main>
 <script src="/hors-ligne.js"></script>

@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 import {
   FilePlus, FileSymlink, Pilcrow, Heading1, Heading2, Heading3, List, ListOrdered, ListTodo, TextQuote, ListCollapse,
   Minus, Info, Lightbulb, MessageSquareWarning, TriangleAlert, OctagonAlert, Table, Image, CodeXml, Workflow,
-  ChartColumn, AppWindow, Calendar, ListTree, type LucideIcon,
+  ChartColumn, AppWindow, Calendar, ListTree, Database, Scale, LayoutTemplate, type LucideIcon,
 } from "lucide-react";
 import type { Magasin, Etat } from "./magasin";
 import type { Icone } from "../menu";
@@ -17,7 +17,7 @@ export const ICONES: Record<Icone, LucideIcon> = {
   numeros: ListOrdered, tache: ListTodo, citation: TextQuote, repliable: ListCollapse, separateur: Minus,
   NOTE: Info, TIP: Lightbulb, IMPORTANT: MessageSquareWarning, WARNING: TriangleAlert, CAUTION: OctagonAlert,
   tableau: Table, image: Image, code: CodeXml, schema: Workflow, graphique: ChartColumn, artefact: AppWindow,
-  date: Calendar, sommaire: ListTree,
+  date: Calendar, sommaire: ListTree, base: Database, decision: Scale, modele: LayoutTemplate,
 };
 
 /** Les 9 couleurs portables (noms écrits dans le fichier) et leur nom français. */

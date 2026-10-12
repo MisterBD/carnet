@@ -6,6 +6,9 @@ import { App } from "./App";
 
 createRoot(document.getElementById("racine")!).render(<App />);
 
+// App iOS « Carnet » : pont de la file de partage (module chargé seulement dans l'app, voir natif.ts).
+if (/CarnetiOS\//.test(navigator.userAgent)) void import("./natif").then((m) => m.installerPontNatif(window));
+
 // Service worker minimal : installation sur l'écran d'accueil + ressources figées en cache (jamais les pages).
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
   window.addEventListener("load", () => {

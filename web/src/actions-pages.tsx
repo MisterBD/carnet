@@ -6,10 +6,15 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   ArrowDown, ArrowUp, Copy, FilePlus, FolderInput, History, Link2, Pencil, Printer, Star, StarOff, Trash2,
 } from "lucide-react";
-import { api, type Noeud, type Position } from "./api";
+import { api, apiBases, type DestinationBase, type Noeud, type Position } from "./api";
+import { baseDuParent, choisirRangement } from "./ranger-base"; // K10-01
+import type { ActionMenu } from "./composants/Dialogues";
+import { iconeGeste, libelleGeste, messageFait, type Drapeau } from "./pages-drapeaux"; // lot 6
 import type { OptionsConfirmation, OptionsTexte } from "./contexte-app";
 import { naviguer, renommerRecentes, urlDe, type Route } from "./navigation";
 import { MenuPage, type ElementMenu } from "./composants/MenuPage";
+import { gelerPages } from "./enregistrement";
+import { elementMenuPreparer } from "./composants/PreparationEntree";
 import { tactile } from "./outils";
 import { dossierDe, feuille, nomDePage } from "../../shared/page.ts";
 
@@ -26,6 +31,8 @@ export interface DependancesPages {
   demanderTexte(o: OptionsTexte): Promise<string | null>;
   confirmer(o: OptionsConfirmation): Promise<boolean>;
   choisirPage(o?: { titre?: string; exclure?: string }): Promise<string | null>;
+  /** K10-01 : choix explicite « Ajouter à la base » / « sous-page » quand la cible porte une base. */
+  actions(titre: string, items: ActionMenu[]): Promise<string | null>;
   fermerTiroir(): void;
 }
 
@@ -144,7 +151,7 @@ interface EtatMenu { chemin: string; ancre: HTMLElement | null }
 export function useActionsPages(d: DependancesPages): {
   nouvellePage(parent: string): Promise<string | null>;
   menuPage(chemin: string, ancre?: HTMLElement | null): Promise<void>;
-  deplacerPage(source: string, parent: string): Promise<string | null>;
+  deplacerPage(source: string, parent: string, base?: DestinationBase | null): Promise<string | null>;
   placerPage(source: string, cible: string, position: Position): Promise<void>;
   supprimerPage(chemin: string): Promise<void>;
   couche: ReactNode;
@@ -192,19 +199,30 @@ export function useActionsPages(d: DependancesPages): {
     }
   }, []);
 
-  const deplacerPage = useCallback(async (source: string, parent: string): Promise<string | null> => {
+  const deplacerPage = useCallback(async (source: string, parent: string, base?: DestinationBase | null): Promise<string | null> => {
     const x = deps.current;
-    const r = await api.deplacer(source, parent);
-    if (parent) x.basculer(parent, true);
-    await x.rechargerArbre();
-    suivre(source, r.chemin);
-    signalerLigne(r.chemin);
-    const dest = parent ? x.index.get(parent)?.titre ?? nomDePage(parent) : "la racine";
-    return `Déplacée dans ${dest}${r.liensMisAJour ? `, ${r.liensMisAJour} lien${r.liensMisAJour > 1 ? "s" : ""} mis à jour` : ""}`;
+    // lot 4 (K2-02, #9) : la saisie en attente de la page ouverte part d'abord ; elle ne relit plus le disque pendant
+    // l'opération (sinon elle redemande sa page à l'ancien chemin : 404).
+    const reprendre = await gelerPages(source);
+    try {
+      const r = await api.deplacer(source, parent);
+      if (parent) x.basculer(parent, true);
+      await x.rechargerArbre();
+      suivre(source, r.chemin);
+      signalerLigne(r.chemin);
+      const dest = parent ? x.index.get(parent)?.titre ?? nomDePage(parent) : "la racine";
+      // K10-01 : rangée dans le dossier des entrées d'une base : on le dit avec le nom de la base
+      const b = base ?? baseDuParent(parent);
+      if (b) return `Ajoutée à ${b.titre} (dossier «\u00a0${feuille(b.dossier)}\u00a0»)${r.liensMisAJour ? `, ${r.liensMisAJour} lien${r.liensMisAJour > 1 ? "s" : ""} mis à jour` : ""}`;
+      return `Déplacée dans ${dest}${r.liensMisAJour ? `, ${r.liensMisAJour} lien${r.liensMisAJour > 1 ? "s" : ""} mis à jour` : ""}`;
+    } finally {
+      reprendre(); // après la navigation : la page déplacée ne relit plus son ancien chemin
+    }
   }, [suivre]);
 
   const placerPage = useCallback(async (source: string, cible: string, position: Position): Promise<void> => {
     const x = deps.current;
+    const reprendre = await gelerPages(source);
     try {
       const avant = dossierDe(source);
       const r = await api.placer(source, cible, position);
@@ -220,6 +238,8 @@ export function useActionsPages(d: DependancesPages): {
     } catch (e) {
       x.notifier(`Déplacement impossible : ${msg(e)}`);
       await x.rechargerArbre();
+    } finally {
+      reprendre();
     }
   }, [suivre]);
 
@@ -232,17 +252,25 @@ export function useActionsPages(d: DependancesPages): {
     const ouverte = routeDansSousArbre(chemin);
     const routeAvant = x.route;
     let r: { id: string };
+    // lot 4 : la version mise à la corbeille contient la dernière saisie ; la page ne relit plus le disque d'ici la
+    // navigation (sinon elle redemande sa page supprimée : 404)
+    const reprendre = await gelerPages(chemin);
     try {
       r = await api.supprimer(chemin);
     } catch (e) {
+      reprendre();
       x.notifier(`Mise à la corbeille impossible : ${msg(e)}`);
       return;
     }
-    x.setFavoris((l) => l.filter((c) => c !== chemin && !c.startsWith(base + "/")));
-    await x.rechargerArbre();
-    if (ouverte) {
-      const parent = dossierDe(chemin);
-      naviguer(parent ? { vue: "page", chemin: parent + ".md" } : { vue: "accueil" }, true);
+    try {
+      x.setFavoris((l) => l.filter((c) => c !== chemin && !c.startsWith(base + "/")));
+      await x.rechargerArbre();
+      if (ouverte) {
+        const parent = dossierDe(chemin);
+        naviguer(parent ? { vue: "page", chemin: parent + ".md" } : { vue: "accueil" }, true);
+      }
+    } finally {
+      reprendre();
     }
     const annuler = async () => {
       try {
@@ -277,6 +305,7 @@ export function useActionsPages(d: DependancesPages): {
       bouton: "Renommer",
     });
     if (!titre || titre === n?.titre) return;
+    const reprendre = await gelerPages(chemin);
     try {
       const r = await api.renommerTitre(chemin, titre);
       await deps.current.rechargerArbre();
@@ -285,10 +314,13 @@ export function useActionsPages(d: DependancesPages): {
       deps.current.notifier(`Renommée${r.liensMisAJour ? `, ${r.liensMisAJour} lien${r.liensMisAJour > 1 ? "s" : ""} mis à jour` : ""}`);
     } catch (e) {
       deps.current.notifier(`Renommage impossible : ${msg(e)}`);
+    } finally {
+      reprendre();
     }
   }, [suivre]);
 
   const dupliquer = useCallback(async (chemin: string) => {
+    const reprendre = await gelerPages(chemin); // la copie contient la dernière saisie
     try {
       const r = await api.dupliquer(chemin);
       await deps.current.rechargerArbre();
@@ -296,21 +328,43 @@ export function useActionsPages(d: DependancesPages): {
       deps.current.notifier("Copie créée", { libelle: "Ouvrir", faire: () => naviguer({ vue: "page", chemin: r.chemin }) });
     } catch (e) {
       deps.current.notifier(`Duplication impossible : ${msg(e)}`);
+    } finally {
+      reprendre();
     }
   }, []);
 
   const deplacerVers = useCallback(async (chemin: string) => {
     const x = deps.current;
     const titre = x.index.get(chemin)?.titre ?? feuille(chemin);
-    const cible = await x.choisirPage({ titre: `Déplacer « ${titre} » dans…`, exclure: chemin });
-    if (cible === null) return;
+    // K10-01 : « Ajouter à <base> » proposé, et choix explicite si la cible porte une base
+    const choix = await choisirRangement(x, chemin, titre, (c) => x.index.get(c)?.titre ?? nomDePage(c));
+    if (choix === null) return;
     try {
-      const m = await deplacerPage(chemin, cible === "__racine__" ? "" : cible);
+      const m = await deplacerPage(chemin, choix.parent, choix.base);
       if (m) deps.current.notifier(m);
     } catch (e) {
       deps.current.notifier(`Déplacement impossible : ${msg(e)}`);
     }
   }, [deplacerPage]);
+
+  /**
+   * Lot 6 : verrouiller / déverrouiller, archiver / désarchiver = poser ou retirer UNE propriété de l'en-tête
+   * (`verrou: true`, `archive: true`), à la révision lue juste avant ; la saisie en attente de la page part d'abord.
+   */
+  const basculerDrapeau = useCallback(async (chemin: string, cle: Drapeau, poser: boolean) => {
+    const reprendre = await gelerPages(chemin);
+    try {
+      const p = await api.page(chemin);
+      if (p.absente || !p.etag) throw new Error("page introuvable");
+      await apiBases.propriete(chemin, cle, poser ? true : undefined, p.etag);
+      await deps.current.rechargerArbre();
+      deps.current.notifier(messageFait(cle, poser));
+    } catch (e) {
+      deps.current.notifier(`${libelleGeste(cle, poser)} : impossible (${msg(e)})`);
+    } finally {
+      reprendre();
+    }
+  }, []);
 
   /** Pages sœurs (même dossier), dans l'ordre affiché. */
   const soeurs = useCallback((chemin: string): Noeud[] => {
@@ -349,6 +403,15 @@ export function useActionsPages(d: DependancesPages): {
         { cle: "dupliquer", libelle: "Dupliquer", icone: <Copy size={18} />, faire: () => void dupliquer(chemin) },
         { cle: "deplacer", libelle: "Déplacer vers…", icone: <FolderInput size={18} />, faire: () => void deplacerVers(chemin) },
       );
+      if (!n?.lectureSeule) {
+        // lot 6 : drapeaux de l'en-tête
+        const v = Boolean(n?.verrou);
+        const a = Boolean(n?.archive);
+        elements.push(
+          { cle: "verrou", libelle: libelleGeste("verrou", !v), icone: iconeGeste("verrou", !v), faire: () => void basculerDrapeau(chemin, "verrou", !v) },
+          { cle: "archive", libelle: libelleGeste("archive", !a), icone: iconeGeste("archive", !a), indice: v ? "verrouillée" : undefined, faire: () => void basculerDrapeau(chemin, "archive", !a) },
+        );
+      }
       if (tactile && i > 0) elements.push({ cle: "monter", libelle: "Monter", icone: <ArrowUp size={18} />, faire: () => void placerPage(chemin, l[i - 1].chemin, "avant") });
       if (tactile && i !== -1 && i < l.length - 1) elements.push({ cle: "descendre", libelle: "Descendre", icone: <ArrowDown size={18} />, faire: () => void placerPage(chemin, l[i + 1].chemin, "apres") });
     }
@@ -361,6 +424,8 @@ export function useActionsPages(d: DependancesPages): {
     });
     if (existe) {
       elements.push({ cle: "historique", libelle: "Historique des versions", icone: <History size={18} />, faire: () => naviguer({ vue: "historique", chemin }) });
+      const preparer = elementMenuPreparer(chemin); // lot 11 : fiche dotée de `sources`
+      if (preparer) elements.push(preparer);
       if (ouverte) elements.push({ cle: "imprimer", libelle: "Imprimer ou exporter en PDF", icone: <Printer size={18} />, faire: () => window.print() });
       elements.push({ cle: "corbeille", libelle: "Mettre à la corbeille", icone: <Trash2 size={18} />, danger: true, separateurAvant: true, faire: () => void supprimerPage(chemin) });
     }

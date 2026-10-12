@@ -1,30 +1,10 @@
 // Carnet · analyse légère du Markdown : blocs de code clôturés, tâches, mentions, réécriture des liens.
 import path from "node:path";
 import { plier, resoudre } from "../../shared/page.ts";
+import { marquerCode } from "../../shared/taches.ts";
 
-const RE_OUVERTURE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
-const RE_FERMETURE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
-
-/** Pour chaque ligne : true si elle appartient à un bloc de code clôturé (``` ou ~~~), délimiteurs compris. */
-export function marquerCode(lignes: string[]): boolean[] {
-  const code = new Array<boolean>(lignes.length).fill(false);
-  let ouvert: { c: string; n: number } | null = null;
-  for (let i = 0; i < lignes.length; i++) {
-    const l = lignes[i].endsWith("\r") ? lignes[i].slice(0, -1) : lignes[i];
-    if (ouvert) {
-      code[i] = true;
-      const m = RE_FERMETURE.exec(l);
-      if (m && m[1][0] === ouvert.c && m[1].length >= ouvert.n) ouvert = null;
-      continue;
-    }
-    const m = RE_OUVERTURE.exec(l);
-    if (m && !(m[1][0] === "`" && m[2].includes("`"))) {
-      ouvert = { c: m[1][0], n: m[1].length };
-      code[i] = true;
-    }
-  }
-  return code;
-}
+// marquerCode vit dans shared/taches.ts (partagé avec l'interface et les lots V3) ; réexporté ici pour l'existant.
+export { marquerCode };
 
 export const RE_TACHE = /^([ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+)\[( |x|X)\](?:[ \t]+(.*))?$/;
 
@@ -82,17 +62,52 @@ export function analyser(contenu: string, lignesFrontmatter: number, mentions: r
   return { taches, mention };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Extraits lisibles (rétroliens, aperçus, résumés) : texte brut, jamais interprété comme HTML par l'interface.
+// ---------------------------------------------------------------------------------------------
+
+const ENTITES_NOMMEES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", hellip: "…", laquo: "«", raquo: "»",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", ndash: "–", mdash: "—", euro: "€", copy: "©", reg: "®",
+  deg: "°", middot: "·", shy: "",
+};
+
+/**
+ * Décode les références de caractères HTML d'un texte DÉJÀ débarrassé de son balisage (« &#x20; », « &#233; »,
+ * « &amp; »…) ; un seul passage (« &amp;#x20; » donne « &#x20; »). Nom inconnu : laissé tel quel ; code invalide : « � ».
+ */
+export function decoderEntites(s: string): string {
+  if (!s.includes("&")) return s;
+  return s.replace(/&(?:#[xX]([0-9a-fA-F]{1,6})|#([0-9]{1,7})|([A-Za-z]{2,8}));/g, (t, hex?: string, dec?: string, nom?: string) => {
+    if (nom !== undefined) return Object.hasOwn(ENTITES_NOMMEES, nom) ? ENTITES_NOMMEES[nom] : t;
+    const cp = hex !== undefined ? parseInt(hex, 16) : parseInt(dec ?? "", 10);
+    if (!Number.isFinite(cp) || cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) return "�";
+    if (cp < 0x20 || (cp >= 0x7f && cp < 0xa0)) return " ";
+    return String.fromCodePoint(cp);
+  });
+}
+
+/** Borne d'un lien remplacé par son libellé : deux liens accolés (« [[A]][[B]] ») seront séparés par une espace. */
+export const BORNE_LIEN = "\u0000";
+
+/** Fin du nettoyage d'un extrait : liens accolés séparés, entités décodées (après le balisage), espaces repliées. */
+export function finirExtrait(t: string): string {
+  return decoderEntites(t.replace(/\u0000\s*\u0000/g, " ").replace(/\u0000/g, "")).replace(/\s+/g, " ").trim();
+}
+
 /** Premier paragraphe lisible du corps (pour un résumé), sans balisage évident. */
 export function extraitCorps(corps: string, max = 160): string {
   const lignes = corps.split("\n");
   const code = marquerCode(lignes);
+  const B = BORNE_LIEN;
   for (let i = 0; i < lignes.length; i++) {
     if (code[i]) continue;
-    let l = lignes[i].trim();
+    let l = lignes[i].replace(/\u0000/g, "").trim();
     if (!l || /^(#{1,6}\s|>\s*\[!|---|\*\*\*|\||<)/.test(l)) continue;
     l = l.replace(/^([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, "").replace(/^>\s?/, "")
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_t, c: string, a?: string) => a || c)
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`~]+/g, "").trim();
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_t, c: string, a?: string) => B + (a || c) + B)
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, (_t, x: string) => B + x + B).replace(/[*_`~]+/g, "");
+    l = finirExtrait(l);
     if (!l) continue;
     return l.length > max ? l.slice(0, max - 1).trimEnd() + "…" : l;
   }

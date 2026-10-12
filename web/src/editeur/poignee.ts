@@ -172,9 +172,22 @@ class Poignee {
     if (!noeud) return true;
     let tr = state.tr.delete(g.pos, g.pos + noeud.nodeSize);
     const p = tr.mapping.map(ou, v.avant ? 1 : -1);
+    const etapes = tr.steps.length;
     tr = tr.replaceRange(p, p, new Slice(Fragment.from(noeud), 0, 0));
-    const debut = tr.mapping.map(p, -1);
-    try { tr.setSelection(NodeSelection.create(tr.doc, Math.min(debut, tr.doc.content.size - 1))); } catch { /* sélection impossible */ }
+    // K2-04 : `p` est une position du document D'APRÈS la suppression ; la repasser dans tout le mapping la décalait
+    // une seconde fois (bloc descendu sous une citation : sélection de nœud posée sur du texte, puis « No node after
+    // pos » au défilement). On cherche le bloc là où l'insertion l'a réellement posé (replaceRange peut l'ajuster).
+    let debut: number | null = null;
+    tr.steps.slice(etapes).forEach((pas) => pas.getMap().forEach((_a, _b, de, a) => {
+      if (debut !== null) return;
+      tr.doc.nodesBetween(de, Math.min(a, tr.doc.content.size), (n, pos) => {
+        if (debut === null && n.eq(noeud)) debut = pos;
+        return debut === null;
+      });
+    }));
+    const pose = debut !== null ? tr.doc.nodeAt(debut) : null;
+    if (debut !== null && pose && NodeSelection.isSelectable(pose)) tr.setSelection(NodeSelection.create(tr.doc, debut));
+    else tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(tr.mapping.slice(etapes).map(p, -1), tr.doc.content.size))));
     this.vue.dispatch(tr.scrollIntoView());
     this.vue.focus();
     return true;

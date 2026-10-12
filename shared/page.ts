@@ -1,5 +1,6 @@
 // Carnet · découpage d'une page Markdown (partagé serveur + interface).
 // Aucune dépendance : importable par Node 22 (types retirés à la volée) et par Vite.
+import { analyseurYamlInstalle, ErreurFormat, poserPropriete } from "./proprietes.ts";
 //
 // Une page = [frontmatter YAML brut] + [bloc titre « # Titre » s'il ouvre le corps] + [corps].
 // Le frontmatter et le bloc titre sont conservés OCTET POUR OCTET : l'éditeur ne voit que le corps.
@@ -19,6 +20,16 @@ export interface Decoupe {
 
 const RE_FM = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
 const RE_H1 = /^ {0,3}#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
+
+/**
+ * `s` sans ses espaces et tabulations finales. Même résultat que `s.replace(/[ \t]+$/, "")`, mais en temps linéaire :
+ * cette expression est quadratique sur une longue suite d'espaces suivie d'un autre caractère (page piégée).
+ */
+export function sansBlancsFinaux(s: string): string {
+  let n = s.length;
+  while (n > 0 && (s.charCodeAt(n - 1) === 32 || s.charCodeAt(n - 1) === 9)) n--;
+  return n === s.length ? s : s.slice(0, n);
+}
 
 export function decouper(contenu: string): Decoupe {
   let frontmatter = "";
@@ -66,6 +77,20 @@ export function decouper(contenu: string): Decoupe {
   }
   void debutLigne;
   return { frontmatter, yaml, blocTitre, titreH1, corps: reste };
+}
+
+/**
+ * Le texte commence-t-il (après d'éventuelles lignes vides) par un titre « # … » ? Écrit en tête du corps d'une page dont
+ * le titre n'est pas une ligne « # » (titre = nom du fichier ou `title:`), ce titre serait relu comme titre de la page
+ * (K2-01) : PageVue écrit alors le titre de la page en « # » juste avant.
+ */
+export function commenceParH1(texte: string): boolean {
+  for (const brute of texte.split("\n")) {
+    const l = brute.replace(/\r$/, "");
+    if (l.trim() === "") continue;
+    return RE_H1.test(l);
+  }
+  return false;
 }
 
 /** Réassemble une page. `titre` remplace le texte du H1 existant en gardant son habillage. */
@@ -131,13 +156,30 @@ export function scalaireYaml(v: string): string {
 }
 
 /**
- * Pose (ou retire, valeur null) une clé scalaire de premier niveau dans le frontmatter brut.
+ * Pose (ou retire, valeur null) une clé de premier niveau dans le frontmatter brut (compatibilité V2).
+ * Délègue à poserPropriete (shared/proprietes.ts : seule la clé change, à l'octet, résultat revérifié) quand un analyseur
+ * YAML est installé (serveur). Sinon (interface), ou si le YAML est refusé par poserPropriete (invalide, ancres…),
+ * comportement V2 ligne à ligne (poserChampLigne). Nouveau code : utiliser poserPropriete.
+ */
+export function poserChamp(frontmatter: string, cle: string, valeur: string | null): string {
+  if (analyseurYamlInstalle()) {
+    try {
+      return poserPropriete(frontmatter, cle, valeur ?? undefined);
+    } catch (e) {
+      if (!(e instanceof ErreurFormat)) throw e;
+    }
+  }
+  return poserChampLigne(frontmatter, cle, valeur);
+}
+
+/**
+ * Version V2 ligne à ligne : pose (ou retire, valeur null) une clé scalaire de premier niveau dans le frontmatter brut.
  * - clé présente sur une ligne « cle: valeur » simple : seule cette ligne change ;
  * - clé absente : ajoutée juste avant le délimiteur de fin ;
  * - pas de frontmatter : un bloc minimal est créé.
  * Renvoie le nouveau frontmatter brut (délimiteurs compris).
  */
-export function poserChamp(frontmatter: string, cle: string, valeur: string | null): string {
+export function poserChampLigne(frontmatter: string, cle: string, valeur: string | null): string {
   if (!frontmatter) {
     if (valeur == null) return "";
     return `---\n${cle}: ${scalaireYaml(valeur)}\n---\n`;

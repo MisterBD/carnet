@@ -31,6 +31,16 @@ export interface EtatLien {
   to: number;
 }
 
+/** Adresse qui vient d'être collée (lot 4) : petit menu « Lien · Signet » à côté. */
+export interface EtatCollage {
+  from: number;
+  to: number;
+  href: string;
+  /** Document juste après le collage : toute autre modification ferme le menu. */
+  doc: unknown;
+  ancre: Rect;
+}
+
 export interface EtatLangue {
   ancre: Rect;
   actuelle: string | null;
@@ -42,6 +52,7 @@ export interface Etat {
   menuBloc: EtatMenuBloc | null;
   lien: EtatLien | null;
   langue: EtatLangue | null;
+  collage: EtatCollage | null;
   /** révision : change à chaque transaction (pour la bulle, la barre de tableau) */
   rev: number;
   focus: boolean;
@@ -53,6 +64,7 @@ export class Magasin {
     menuBloc: null,
     lien: null,
     langue: null,
+    collage: null,
     rev: 0,
     focus: false,
   };
@@ -81,7 +93,7 @@ export class Magasin {
   }
 
   fermerTout(): void {
-    this.maj({ menuBloc: null, lien: null, langue: null });
+    this.maj({ menuBloc: null, lien: null, langue: null, collage: null });
   }
 }
 

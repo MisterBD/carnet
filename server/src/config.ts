@@ -2,13 +2,16 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { FUSEAU_DEFAUT, fuseauValide } from "../../shared/identifiants.ts";
 import { plier } from "../../shared/page.ts";
+import { analyserRegle, ErreurRegle, estTechnique, lireTechniques } from "../../shared/techniques.ts";
+import type { Techniques } from "../../shared/techniques.ts";
 
 /** Une ligne de la table « origine appli = base artefacts ». */
 export interface Correspondance {
-  /** Origine de l'appli, normalisée (minuscules, port par défaut omis), ex. « https://hote.ts.net:8447 ». */
+  /** Origine de l'appli, normalisée (minuscules, port par défaut omis), ex. « https://hote.ts.net:8443 ». */
   appli: string;
-  /** Base des artefacts associée, ex. « https://hote.ts.net:8446 ». */
+  /** Base des artefacts associée, ex. « https://hote.ts.net:8444 ». */
   art: string;
   schema: string;
   hote: string;
@@ -40,6 +43,8 @@ export interface Config {
   etat: string;
   /** Dossiers de premier niveau masqués (en plus des règles fixes : segments cachés et « artefacts »). */
   masques: Set<string>;
+  /** Lot 1 : dossier des captures (CARNET_INBOX, « Inbox » par défaut ; casse respectée : « inbox/ » est un autre dossier). */
+  inbox: string[];
   /** Mentions qui placent une page dans « À relire », normalisées (minuscules, sans accents, avec « @ »), ex. « @camille ». */
   mentions: string[];
   /** Nom du réseau privé à allumer pour joindre Carnet (« Tailscale »…), cité par les écrans hors ligne ; "" = texte générique. */
@@ -54,10 +59,27 @@ export interface Config {
   pingMs: number;
   /** Jours avant la purge automatique de la corbeille (0 : jamais). */
   corbeilleJours: number;
+  /** Minutes sans écriture d'une page après lesquelles le prochain enregistrement garde une version automatique (0 : jamais). */
+  pauseVersions: number;
   /** Historique git : « auto » (dépôt qui contient l'espace), « non », ou chemin d'un dossier git (GIT_DIR). */
   git: string;
   /** Chemin de l'espace dans le dépôt (seulement quand `git` est un chemin), sans barre finale ("" = racine). */
   gitPrefixe: string;
+  /** Fuseau IANA des dates « locales » (identifiants, date du jour, horodatages du journal) : CARNET_FUSEAU, Europe/Paris par défaut. */
+  fuseau: string;
+  /** Fichiers des agents (CARNET_TECHNIQUES, lot 3) : regroupés à part, exclus des parcours quotidiens. */
+  techniques: Techniques;
+  /**
+   * Lot 5 : points de panne d'ESSAI (CARNET_PANNE_ESSAI="avant-rename:<sous-chaîne>,apres-rename:<sous-chaîne>", un ou
+   * plusieurs, séparés par des virgules) : le serveur se tue (SIGKILL) une seule fois PAR POINT pendant l'écriture d'une
+   * page dont le chemin contient la sous-chaîne. Recettes seulement (absent = inactif). Voir Ecrivain.#panne.
+   */
+  panneEssai?: PanneEssai[] | null;
+  /**
+   * Lot 12 : horloge d'ESSAI des bases (CARNET_HORLOGE_ESSAI = chemin d'un fichier contenant un instant ISO, relu à
+   * chaque évaluation). Recettes seulement (absent = horloge réelle). Voir Bases.maintenant.
+   */
+  horlogeEssai?: string | null;
 }
 
 const RE_ORIGINE = /^(https?):\/\/([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?$/;
@@ -199,6 +221,15 @@ export function lireConfig(env: Record<string, string | undefined> = process.env
     );
   }
   const prenom = (env.CARNET_PRENOM || "").trim().slice(0, 40);
+  const techniques = lireTechniquesConfig(env.CARNET_TECHNIQUES);
+  for (const r of techniques.ignorees) avertissements.push(`CARNET_TECHNIQUES : règle « ${r} » ignorée (la boîte de capture n'est jamais masquée).`);
+  const inbox = lireInbox(env.CARNET_INBOX, new Set((env.CARNET_MASQUES ?? "").split(/\s+/).filter(Boolean).map((s) => s.normalize("NFC"))));
+  // Intégration lots 1 et 3 : la boîte de capture n'est jamais un « fichier des agents », même quand CARNET_INBOX
+  // porte un autre nom qu'« Inbox » (la protection de shared/techniques.ts ne connaît que ce nom-là).
+  if (estTechnique(techniques, [...inbox, "capture.md"].join("/")) || estTechnique(techniques, inbox.join("/") + ".md")) {
+    techniques.regles.push(analyserRegle("!/" + inbox.join("/") + "/"));
+    avertissements.push(`CARNET_TECHNIQUES : la boîte de capture (${inbox.join("/")}) reste visible malgré les règles.`);
+  }
   return {
     espace,
     nomEspace: env.CARNET_NOM_ESPACE || path.basename(espace),
@@ -215,6 +246,7 @@ export function lireConfig(env: Record<string, string | undefined> = process.env
     ttl: entier(env.CARNET_ART_TTL, 900, 30, 86400, "CARNET_ART_TTL"),
     etat,
     masques: new Set((env.CARNET_MASQUES ?? "").split(/\s+/).filter(Boolean).map((s) => s.normalize("NFC"))),
+    inbox,
     mentions: lireMentions(env.CARNET_MENTIONS, prenom),
     reseau: lireLibelle(env.CARNET_RESEAU, "CARNET_RESEAU"),
     contact: lireLibelle(env.CARNET_CONTACT, "CARNET_CONTACT"),
@@ -224,9 +256,71 @@ export function lireConfig(env: Record<string, string | undefined> = process.env
     regroupementMs: entier(env.CARNET_REGROUPEMENT_MS, 120, 0, 10_000, "CARNET_REGROUPEMENT_MS"),
     pingMs: entier(env.CARNET_PING_MS, 20_000, 100, 600_000, "CARNET_PING_MS"),
     corbeilleJours: entier(env.CARNET_CORBEILLE_JOURS, 30, 0, 36_500, "CARNET_CORBEILLE_JOURS"),
+    pauseVersions: entier(env.CARNET_PAUSE_VERSIONS, 10, 0, 1440, "CARNET_PAUSE_VERSIONS"),
     git: lireGit(env.CARNET_GIT),
     gitPrefixe: lirePrefixe(env.CARNET_GIT_PREFIXE),
+    fuseau: lireFuseau(env.CARNET_FUSEAU),
+    techniques,
+    panneEssai: lirePanneEssai(env.CARNET_PANNE_ESSAI, avertissements),
+    horlogeEssai: lireHorlogeEssai(env.CARNET_HORLOGE_ESSAI, avertissements),
   };
+}
+
+export interface PanneEssai { point: "avant-rename" | "apres-rename"; motif: string }
+
+/** CARNET_HORLOGE_ESSAI (lot 12, recettes) : chemin absolu d'un fichier « instant ISO ». */
+function lireHorlogeEssai(v: string | undefined, avertissements: string[]): string | null {
+  if (!v || !v.trim()) return null;
+  const f = v.trim();
+  if (!path.isAbsolute(f)) throw new Error(`CARNET_HORLOGE_ESSAI : chemin absolu attendu, reçu ${JSON.stringify(f.slice(0, 80))}`);
+  avertissements.push(`CARNET_HORLOGE_ESSAI=${f} : today() et now() des bases suivent ce fichier (recette seulement, jamais en production).`);
+  return f;
+}
+
+/**
+ * CARNET_PANNE_ESSAI (lot 5, recettes) : un ou plusieurs « avant-rename:<sous-chaîne> » / « apres-rename:<sous-chaîne> »
+ * séparés par des virgules (une virgule suivie d'un nouveau point ; la sous-chaîne peut contenir des espaces).
+ */
+export function lirePanneEssai(v: string | undefined, avertissements: string[]): PanneEssai[] | null {
+  if (v === undefined || v.trim() === "") return null;
+  const res: PanneEssai[] = [];
+  for (const morceau of v.trim().split(/,(?=\s*(?:avant|apres)-rename:)/)) {
+    const m = /^(avant-rename|apres-rename):(.{1,200})$/su.exec(morceau.trim());
+    if (!m) throw new Error(`CARNET_PANNE_ESSAI : « avant-rename:<sous-chaîne> » ou « apres-rename:<sous-chaîne> » (séparés par des virgules) attendu, reçu ${JSON.stringify(v.slice(0, 60))}`);
+    res.push({ point: m[1] as PanneEssai["point"], motif: m[2].normalize("NFC") });
+  }
+  avertissements.push(`CARNET_PANNE_ESSAI=${res.map((p) => `${p.point}:${p.motif}`).join(",")} : le serveur s'arrêtera brutalement une fois par point pendant une écriture (recette seulement, jamais en production).`);
+  return res;
+}
+
+/** CARNET_INBOX : chemin relatif simple dans l'espace (« Inbox », « Notes/Boîte »), ni caché, ni masqué, ni « artefacts ». */
+export function lireInbox(v: string | undefined, masques: Set<string>): string[] {
+  const x = (v ?? "").trim().normalize("NFC").replace(/^\/+|\/+$/g, "") || "Inbox";
+  const segs = x.split("/");
+  if (segs.length > 8) throw new Error("CARNET_INBOX : chemin trop profond");
+  for (const s of segs) {
+    if (s === "" || s === "." || s === ".." || s.startsWith(".") || /[\u0000-\u001f\u007f\\]/.test(s) || Buffer.byteLength(s) > 255) {
+      throw new Error("CARNET_INBOX : chemin relatif simple attendu (ex. Inbox)");
+    }
+  }
+  if (segs[0] === "artefacts" || masques.has(segs[0])) throw new Error("CARNET_INBOX : ce dossier est masqué ou réservé");
+  return segs;
+}
+
+function lireTechniquesConfig(v: string | undefined): Techniques {
+  try {
+    return lireTechniques(v);
+  } catch (e) {
+    if (e instanceof ErreurRegle) throw new Error(`CARNET_TECHNIQUES : ${e.message}`);
+    throw e;
+  }
+}
+
+function lireFuseau(v: string | undefined): string {
+  const x = (v ?? "").trim();
+  if (x === "") return FUSEAU_DEFAUT;
+  if (!/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(x) || !fuseauValide(x)) throw new Error(`CARNET_FUSEAU : fuseau IANA attendu (ex. Europe/Paris), reçu ${JSON.stringify(x.slice(0, 60))}`);
+  return x;
 }
 
 function lireGit(v: string | undefined): string {

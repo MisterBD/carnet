@@ -3,6 +3,7 @@ import type { Editor, Range } from "@tiptap/core";
 import { plier } from "../../../shared/page.ts";
 import type { ContexteEditeur } from "./contexte";
 import { lienVersArtefact } from "./vues";
+import { modeleBase, creerBase } from "../bases/modele";
 
 export const MODELE_MERMAID = `flowchart LR
   A[Idée] --> B{On y va ?}
@@ -25,7 +26,7 @@ export const MODELE_VEGA = `{
 export type Icone =
   | "sousPage" | "lienPage" | "texte" | "h1" | "h2" | "h3" | "puces" | "numeros" | "tache" | "citation" | "repliable"
   | "separateur" | "NOTE" | "TIP" | "IMPORTANT" | "WARNING" | "CAUTION" | "tableau" | "image" | "code" | "schema"
-  | "graphique" | "artefact" | "date" | "sommaire";
+  | "graphique" | "artefact" | "date" | "sommaire" | "base" | "decision" | "modele";
 
 export interface EntreeSlash {
   cle: string;
@@ -158,10 +159,61 @@ export const ENTREES: EntreeSlash[] = [
       });
     },
   },
+  {
+    // V3 lot 2 : base de données (dossier de pages + bloc ```base en vue tableau)
+    cle: "base", groupe: "Insérer", libelle: "Base de données", aide: "Tableau de pages", icone: "base",
+    mots: "base donnees database tableau table collection suivi taches notion",
+    executer: (editor, range, { contexte }) => {
+      editor.chain().focus().deleteRange(range).run();
+      void creerBase(contexte).then((dossier) => {
+        if (!dossier) return;
+        insererBloc(editor, { from: editor.state.selection.from, to: editor.state.selection.from },
+          { type: "codeBlock", attrs: { language: "base" }, content: [{ type: "text", text: modeleBase(dossier) }] });
+      });
+    },
+  },
   { cle: "date", groupe: "Insérer", libelle: "Date du jour", aide: "Lien vers le journal", icone: "date", mots: "date aujourd'hui jour calendrier today",
     executer: (e, r) => { e.chain().focus().deleteRange(r).insertContent([{ type: "wikilien", attrs: { valeur: date() } }, { type: "text", text: " " }]).run(); } },
   { cle: "sommaire", groupe: "Insérer", libelle: "Sommaire", aide: "Liste des titres", icone: "sommaire", mots: "sommaire table des matieres toc plan",
     executer: (e, r) => insererBloc(e, r, { type: "sommaire" }) },
+  // Lot 3 : en dernier (le menu garde sa disposition ; « /decision » la trouve aussitôt).
+  {
+    cle: "decision", groupe: "Décisions", libelle: "Demande de décision", aide: "Approuver · corriger · refuser", icone: "decision",
+    mots: "decision demande accord approbation approuver valider go arbitrage",
+    executer: (editor, range, { contexte }) => {
+      editor.chain().focus().deleteRange(range).run();
+      if (!contexte.creerDecision) return;
+      void contexte.creerDecision().then((nom) => {
+        if (!nom) return;
+        if (blocVide(editor)) insererEnLigne(editor, nom, true);
+        else {
+          const { $from } = editor.state.selection;
+          const fin = $from.after($from.depth);
+          editor.chain().insertContentAt(fin, { type: "paragraph", content: [{ type: "wikilien", attrs: { valeur: nom } }] }).run();
+        }
+        contexte.ouvrirPage(nom);
+      });
+    },
+  },
+  // Lot 6 : sous-page créée depuis un modèle (dossier « Modèles/ »), lien inséré ici, puis la page s'ouvre.
+  {
+    cle: "modele", groupe: "Modèles", libelle: "Page depuis un modèle", aide: "Compte rendu, fiche, décision…", icone: "modele",
+    mots: "modele template gabarit page nouvelle compte rendu fiche",
+    executer: (editor, range, { contexte }) => {
+      editor.chain().focus().deleteRange(range).run();
+      if (!contexte.creerDepuisModele) return;
+      void contexte.creerDepuisModele().then((nom) => {
+        if (!nom) return;
+        if (blocVide(editor)) insererEnLigne(editor, nom, true);
+        else {
+          const { $from } = editor.state.selection;
+          const fin = $from.after($from.depth);
+          editor.chain().insertContentAt(fin, { type: "paragraph", content: [{ type: "wikilien", attrs: { valeur: nom } }] }).run();
+        }
+        contexte.ouvrirPage(nom);
+      });
+    },
+  },
 ];
 
 /** Passe le bloc courant en tâche (liste à puces + case), ou retire la case. */

@@ -25,6 +25,7 @@ import { __iconData as page } from "lucide-react/dist/esm/icons/file-text.mjs";
 import { __iconData as pleinEcran } from "lucide-react/dist/esm/icons/maximize-2.mjs";
 import { __iconData as ouvrir } from "lucide-react/dist/esm/icons/external-link.mjs";
 import { __iconData as fermer } from "lucide-react/dist/esm/icons/x.mjs";
+import { __iconData as retourLigne } from "lucide-react/dist/esm/icons/text-wrap.mjs";
 
 type Donnees = { node?: Array<[string, Record<string, string>]> } | Array<[string, Record<string, string>]>;
 
@@ -59,6 +60,7 @@ export const icEncadre: Record<string, string> = {
 };
 export const icDivers = {
   page: svg(page, 16, 2), pleinEcran: svg(pleinEcran, 16, 2), ouvrir: svg(ouvrir, 16, 2), fermer: svg(fermer, 20, 2),
+  retourLigne: svg(retourLigne, 16, 2),
 };
 
 export const CASE_VIDE = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;

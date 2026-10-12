@@ -12,7 +12,7 @@ Un lien interne s'écrit entre doubles crochets, avec le chemin de la page depui
 
 - Un lien simple : [[Projets/Fête du vélo]]
 - Avec un alias : [[Projets/Fête du vélo|la grande fête]]
-- Vers un titre de la page : [[To-do#Cette semaine]] (l'ancre est conservée dans le fichier ; la page s'ouvre en haut, le saut jusqu'au titre viendra)
+- Vers un titre de la page : [[To-do#Cette semaine]] (la page s'ouvre directement sur ce titre ; une ancre inconnue ouvre la page en haut)
 - Vers une page d'index : [[Projets]]
 
 Un lien dans une phrase s'affiche comme une pastille cliquable : voir [[Projets/Site web de l'atelier]] pour la refonte du site, ou [[Réunions/2026-10-05 Point du lundi]] pour la dernière réunion.

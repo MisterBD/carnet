@@ -1,17 +1,32 @@
+# Chaque proposition de Dependabot reçoit la même revue de sécurité qu'une contribution (voir CONTRIBUTING.md).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /server
     schedule: { interval: weekly }
+    open-pull-requests-limit: 3
   - package-ecosystem: npm
     directory: /web
     schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    ignore:
+      # highlight.js suit la plage de lowlight (~11.11.x) : une version mineure seule installerait un second exemplaire.
+      # Les correctifs 11.11.x passent toujours ; la mineure suivante viendra avec une nouvelle version de lowlight.
+      - dependency-name: highlight.js
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # Node reste sur une version LTS ; un changement de version majeure se décide à la main, avec la recette complète.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /artefacts
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

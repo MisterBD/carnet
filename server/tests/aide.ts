@@ -106,7 +106,7 @@ export async function demarrerBanc(opts: {
     CARNET_HOTE: "127.0.0.1",
     CARNET_STATIQUE: dist,
     CARNET_UTILISATEURS_AUTORISES: LOGIN,
-    CARNET_ORIGINES_ARTEFACTS: `http://${HOTE}=http://art.test https://carnet.ts.net:8447=https://carnet.ts.net:8446`,
+    CARNET_ORIGINES_ARTEFACTS: `http://${HOTE}=http://art.test https://carnet.ts.net:8443=https://carnet.ts.net:8444`,
     CARNET_MASQUES: MASQUES.join(" "),
     CARNET_MENTIONS: "@camille",
     CARNET_CLE: cle,

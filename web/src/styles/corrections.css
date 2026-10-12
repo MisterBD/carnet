@@ -1,0 +1,228 @@
+/* Lot 4 « Corrections » (Carnet V3) : sommaire « Sur cette page », signets.
+   Fichier à part pour des fusions triviales avec les autres lots. */
+
+/* ---------------------------------------------------------------- Sur cette page */
+
+.sur-cette-page {
+  display: none;
+}
+
+.sur-cette-page__titre {
+  margin: 0 0 var(--e2) 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--encre-3);
+}
+
+.sur-cette-page__liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--trait);
+}
+
+.sur-cette-page__liste a {
+  display: block;
+  margin-left: -1px;
+  padding: 5px 8px 5px 13px;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--rayon-petit) var(--rayon-petit) 0;
+  color: var(--encre-3);
+  text-decoration: none;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  transition: color var(--transition), background-color var(--transition), border-color var(--transition);
+}
+
+.sur-cette-page__liste li[data-niveau="2"] a { padding-left: 25px; }
+.sur-cette-page__liste li[data-niveau="3"] a { padding-left: 37px; }
+
+.sur-cette-page__liste a[aria-current] {
+  color: var(--indigo);
+  border-left-color: var(--indigo);
+  font-weight: 600;
+}
+
+.sur-cette-page__liste a:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .sur-cette-page__liste a:hover {
+    color: var(--encre);
+    background: var(--survol);
+  }
+}
+
+/* Grand écran : panneau à droite du texte, dans la marge (texte de 720 px centré à droite de la barre latérale). */
+@media (min-width: 1400px) {
+  .sur-cette-page:not(.sur-cette-page--feuille) {
+    display: block;
+    position: fixed;
+    z-index: 4;
+    top: calc(var(--haut-entete) + var(--sa-haut) + 44px);
+    right: 16px;
+    width: min(240px, calc((100vw - var(--largeur-barre) - var(--largeur-texte) - 112px) / 2 + 56px - 40px));
+    max-height: calc(100dvh - var(--haut-entete) - var(--sa-haut) - 120px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    font-size: 13px;
+  }
+
+  .sur-cette-page__bouton {
+    display: none;
+  }
+}
+
+/* Feuille (iPhone, écrans plus étroits) : grandes cibles. */
+.sur-cette-page--feuille {
+  display: block;
+  padding: 0 var(--e4) var(--e4);
+  overflow-y: auto;
+  font-size: 16px;
+}
+
+.sur-cette-page--feuille .sur-cette-page__liste a {
+  min-height: var(--cible);
+  display: flex;
+  align-items: center;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+@media print {
+  .sur-cette-page,
+  .sur-cette-page__bouton {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------- Signet (adresse seule entre chevrons) */
+
+.carnet-pm p.carnet-signet {
+  position: relative;
+  margin: 6px 0;
+  min-height: 60px;
+  padding: 30px 14px 9px 60px;
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon);
+  background: var(--feuille);
+  box-shadow: var(--ombre-1);
+  line-height: 1.35;
+}
+
+.carnet-pm p.carnet-signet::before {
+  content: attr(data-initiale);
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--indigo-voile);
+  color: var(--indigo);
+  font-weight: 700;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.carnet-pm p.carnet-signet::after {
+  content: attr(data-domaine);
+  position: absolute;
+  left: 60px;
+  right: 14px;
+  top: 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--encre);
+  pointer-events: none;
+}
+
+.carnet-pm p.carnet-signet a:not(.carnet-wikilien) {
+  color: var(--encre-3);
+  font-size: 13px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .carnet-pm p.carnet-signet:hover { border-color: var(--trait-fort); }
+  .carnet-pm p.carnet-signet a:not(.carnet-wikilien):hover { text-decoration: underline; color: var(--indigo); }
+}
+
+/* Menu « Lien · Signet » après un collage */
+.carnet-collage {
+  width: auto;
+  flex-direction: row;
+  gap: 2px;
+  padding: 4px;
+}
+
+.carnet-collage__choix {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--encre-2);
+  font: inherit;
+  font-size: 14px;
+}
+
+.carnet-collage__choix[aria-pressed="true"] {
+  background: var(--indigo-voile);
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+.carnet-collage__choix:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .carnet-collage__choix:hover { background: var(--survol); color: var(--encre); }
+}
+
+@media (pointer: coarse) {
+  .carnet-collage__choix { min-height: var(--cible); }
+}
+
+
+/* Lien habillé en bouton (« Voir la corbeille », #10) : même allure qu'un .bouton */
+a.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: var(--encre);
+  text-decoration: none;
+}
+
+/* Intégration V3 : un lien habillé en bouton PRINCIPAL (lots 10 et 11 : « Ouvrir le résultat », « Ouvrir la décision »)
+   garde le texte clair sur l'accent (la règle ci-dessus, plus précise que .bouton--primaire, le rendait illisible). */
+a.bouton.bouton--primaire {
+  color: var(--sur-accent);
+}
+
+a.bouton:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+/* Toast avec une action (« Copier mon texte ») : le libellé du bouton ne se coupe pas */
+.toast button {
+  white-space: nowrap;
+  flex: none;
+}

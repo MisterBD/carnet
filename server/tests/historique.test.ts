@@ -193,7 +193,7 @@ describe("sans git / GIT_DIR explicite", () => {
     const d = await demarrerBanc({ env: { CARNET_GIT: "non" }, preparer: (racine) => preparerDepot(racine) });
     try {
       const h = (await d.req("GET", "/api/historique?chemin=" + q("Hist/Renommée.md"))).json;
-      assert.deepEqual(h, { git: false, versions: [] });
+      assert.deepEqual(h, { git: false, versions: [], pauseVersions: 10 });
       const r = await d.req("GET", `/api/version?chemin=${q("Hist/Renommée.md")}&id=git:${hashs.v1}`);
       assert.equal(r.statut, 404);
     } finally {

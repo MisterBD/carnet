@@ -1444,13 +1444,23 @@
   left: 50%;
   bottom: calc(20px + var(--sa-bas));
   transform: translateX(-50%);
-  z-index: 100;
+  /* K13-01 : SOUS les menus et feuilles (menus de l'éditeur 64-70, feuilles 80, menu ancré et plein écran 90,
+     visionneuse 120) : une notification ne masque ni n'intercepte jamais un menu ouvert ; au-dessus de la barre du
+     clavier (60) et de la pastille réseau (50). Elle ne s'efface pas tant qu'un menu la couvre (App.tsx, notifier). */
+  z-index: 62;
   display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: center;
   pointer-events: none;
   width: min(92vw, 440px);
+}
+
+/* Tiroir des pages ouvert (iPhone) : la notification passe aussi dessous. */
+@media (max-width: 899.98px) {
+  body:has(.voile-barre[data-visible="true"]) .toasts {
+    z-index: 38;
+  }
 }
 
 .toast {
@@ -1871,11 +1881,14 @@
 .kanban {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(250px, 1fr);
+  /* #3 : 5 colonnes tiennent dans la largeur utile d'un écran de 1 440 px (barre latérale ouverte) ; au-delà de
+     5 statuts, ou plus étroit, le kanban défile et la dernière colonne arrive entière à l'écran */
+  grid-auto-columns: minmax(184px, 1fr);
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 12px;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 2px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1885,6 +1898,7 @@
     margin: 0 -20px;
     padding: 0 20px 12px;
     scroll-padding: 0 20px;
+    scroll-snap-type: x mandatory;
   }
 }
 
@@ -1937,10 +1951,26 @@
 .carte-projet__meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px 10px;
   margin-top: 6px;
   font-size: 13px;
   color: var(--encre-3);
+}
+
+/* #4 : priorité en pastille courte */
+.carte-projet__meta .pastille,
+.tableau-projets .pastille {
+  height: 22px;
+  padding: 0 8px;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.carte-projet__meta .pastille::before,
+.tableau-projets .pastille::before {
+  width: 6px;
+  height: 6px;
 }
 
 .carte-projet select {

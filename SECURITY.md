@@ -17,6 +17,8 @@ Versions prises en charge : la dernière version publiée et la branche `main`.
 1. **Le navigateur et la session de la personne** : aucun contenu écrit par un agent ne doit s'exécuter dans l'origine de l'application.
 2. **Les pages et fichiers de l'hôte** : l'application ne lit et n'écrit que dans le dossier de pages configuré.
 3. **L'accès** : seules les personnes autorisées ouvrent Carnet.
+4. **Le sens d'une décision** : une décision enregistrée correspond à une proposition précise, et un agent ne peut pas faire passer pour humain un geste qu'il a fabriqué.
+5. **La saisie** : une écriture n'est jamais perdue ni faite deux fois en silence (coupure réseau, réponse perdue, page modifiée ailleurs ou verrouillée entre-temps).
 
 ### Qui l'attaque
 
@@ -29,6 +31,10 @@ Versions prises en charge : la dernière version publiée et la branche `main`.
 | **Corbeille ou historique piégés** | un `.meta.json` de corbeille réécrit pour restaurer une page hors de l'espace ; un nom de fichier comme `$(touch x)` ou `--help` pour détourner git | la meta est revalidée comme un chemin venu du client avant toute restauration, l'effacement reste confiné à l'élément ; git est lancé sans shell (`execFile`), avec des chemins littéraux, sans configuration système ni globale, seulement pour `log` et `cat-file`, en lecture seule ; identifiants de version et de corbeille en liste blanche |
 | **Lien d'artefact volé ou deviné** | partage d'une URL d'artefact | jeton HMAC de 15 minutes, limité au dossier de l'artefact, comparé en temps constant |
 | **Personne non autorisée** qui joint le service | un scanneur sur Internet | aucun port public ; un proxy authentifiant est la seule porte ; liste `CARNET_UTILISATEURS_AUTORISES` ; sans en-tête d'identité : `403` |
+| **Agent qui fabrique une autorité** | un agent écrit lui-même une section `## Décision` « approuvée », ou change la proposition après l'approbation | le Markdown d'une décision n'est qu'une déclaration ; la preuve est calculée par le serveur à partir d'une attestation signée **hors de l'espace**, dont l'empreinte doit être celle de la proposition actuelle (sinon : « périmée ») ; dès qu'une clé d'accès est enregistrée, tout geste exige une assertion WebAuthn signée sur cette empreinte ; l'enrôlement d'une clé exige un code créé hors de l'application ; une restauration ne rend jamais valide une ancienne attestation |
+| **Écriture rejouée ou concurrente** | une requête renvoyée après une coupure, un agent qui écrit pendant que tu tapes | une seule porte d'écriture : identifiant d'idempotence par geste (un renvoi ne refait rien, un identifiant réutilisé pour autre chose est refusé), révision attendue (`412`), aucun écrasement aveugle, instantané avant « garder la mienne », copie de conflit à nom unique, verrou de page (`423`) |
+| **Bloc de base piégé** | un bloc ` ```base ` qui tente d'exécuter du code ou de lister des pages masquées | grammaire fermée analysée par un code maison (aucun `eval`, aucune expression régulière fournie par la page), expression inconnue = erreur visible ; évaluation sur l'index déjà confiné (ni fichiers cachés, ni zones masquées, ni liens symboliques sortants) ; réécriture du bloc chirurgicale ou refusée |
+| **Sources piégées** | une capture dont le lien vise un service interne ; une fiche dont les `sources` désignent une zone masquée | le serveur ne sort jamais sur le réseau : un lien de capture est enregistré, jamais récupéré ; une source masquée, technique ou hors de l'espace est « non accessible », sans lecture ni indice sur son contenu (même réponse qu'elle existe ou non) ; nombre de sources et taille des extraits bornés, extraits en texte simple |
 
 ### Les contraintes de l'installation
 
@@ -39,8 +45,9 @@ Ce sont des **conditions de la sécurité**, pas des options :
 3. **Les artefacts sont sur une autre origine** que l'application (autre nom d'hôte ou autre port). Sur la même origine, un artefact pourrait lire l'application. Le serveur refuse la signature de liens sur le nom d'hôte public des artefacts.
 4. **Les ports restent sur `127.0.0.1`.** Le conteneur `carnet` est sur un réseau Docker dédié : aucun conteneur voisin ne peut l'appeler en forgeant l'en-tête.
 5. **`CARNET_DEV=1` est réservé à l'essai local.** Il désactive l'identité. Le serveur refuse de démarrer avec ce mode si une origine non locale est déclarée.
-6. **La clé de signature** (`secrets/art-hmac.key`) reste en `chmod 600`, hors de git et hors des pages. Une fuite permet de forger des liens d'artefacts de 15 minutes pour les artefacts existants ; remplace-la pour tout invalider.
+6. **La clé de signature** (`secrets/art-hmac.key`) reste en `chmod 600`, hors de git et hors des pages. Une fuite permet de forger des liens d'artefacts de 15 minutes pour les artefacts existants ; remplace-la pour tout invalider. Elle sert aussi, par dérivation, à signer les attestations de décision : une fuite permet d'en forger, et après un remplacement les attestations signées avec l'ancienne clé ne se vérifient plus.
 7. **Ne partage pas la machine avec des tiers non fiables** : un processus local qui atteint `127.0.0.1:3020` peut forger l'en-tête d'identité.
+8. **Le dossier d'état (`CARNET_ETAT`) reste hors de l'espace et hors de portée des agents.** Il contient les journaux d'écriture, les attestations, les clés d'accès enregistrées, les codes d'enrôlement, et des copies de pages (instantanés, versions marquées vues). Un agent qui peut y écrire, ou lancer la commande d'administration des clés, peut enrôler une clé logicielle. Si tes agents tournent sur la même machine, fais-les tourner sous un autre utilisateur système que Carnet.
 
 ### Défense en profondeur déjà en place
 
@@ -52,10 +59,40 @@ Ce sont des **conditions de la sécurité**, pas des options :
 - Conteneurs : utilisateur non root, système de fichiers en lecture seule, `cap_drop: ALL`, `no-new-privileges`, mémoire, CPU et processus plafonnés.
 - Chaîne d'approvisionnement : images de base et kit d'artefacts épinglés par version et empreinte, avis de sécurité npm interrogés à la construction du kit, licences et secrets contrôlés avant chaque publication.
 
+### Clés d'accès : ce qu'elles prouvent
+
+Le proxy authentifiant dit **qui a ouvert la session**, pas **qui a fait le geste** : un agent qui passe par le même compte a la même identité. Pour les décisions, Carnet prend en charge les clés d'accès (WebAuthn : Face ID ou Touch ID, par exemple).
+
+- **Ce qu'une décision signée par une clé d'accès prouve** : qu'une personne présente devant un appareil enregistré, et vérifiée par lui (présence **et** vérification de l'utilisateur), a fait ce geste-là (approuver, demander une correction, refuser) sur cette proposition-là. Le défi signé contient l'empreinte de la proposition ; l'origine, le nom d'hôte de l'application et le compteur de signature sont vérifiés.
+- **Ce qu'elle ne prouve pas** : que la proposition est juste, ni que l'action décrite est autorisée. **Une attestation n'est jamais une autorisation d'exécuter** : l'outil qui exécute une action engageante doit vérifier lui-même la preuve au moment d'agir.
+- **Sans clé enregistrée** (état par défaut), une décision reste possible mais elle est affichée « geste non prouvé » : la seule garantie est alors l'identité du proxy. Dès qu'une clé est enregistrée, toute décision en exige une.
+- **Enrôlement** : uniquement avec un code à usage unique créé hors de l'application (`node server/src/admin-cles.ts code`, ou `docker compose exec carnet node src/admin-cles.ts code` en Docker, voir [docs/deploiement.md](docs/deploiement.md)) ; aucune route HTTP ne crée de code ni ne retire de clé. L'attestation de l'authentificateur (modèle, fabricant) n'est pas vérifiée : la confiance vient de ce code.
+
+### Surfaces ajoutées par la V3
+
+- **Routes d'écriture** (captures, propriétés, bases, modèles, journal du jour, décisions, retour à une version vue, copies de conflit, dossier de rendez-vous) : mêmes protections que les autres mutations (identité, `X-Carnet: 1`, `Origin` et `Sec-Fetch-Site`, chemins confinés), et toutes passent par la porte d'écriture unique. Les gestes qu'on ne doit jamais faire deux fois exigent un identifiant d'idempotence. Les mouvements (renommer, déplacer, corbeille) vérifient la révision de la source quand le client la fournit et n'écrasent jamais une destination.
+- **Journaux hors de l'espace** : l'attribution, les intentions et les attestations contiennent des chemins, des empreintes et des identités, pas le contenu des pages. L'auteur déclaré par une page (`maj_par`) est affiché comme une déclaration, jamais comme une preuve.
+- **Flux en direct (SSE)** : derrière la même identité que l'API ; il ne transporte que des chemins et des `ETag`, jamais de contenu ; le nombre de flux simultanés est plafonné (`CARNET_MAX_SSE`).
+- **Brouillons dans le navigateur** : une saisie non confirmée est gardée dans le stockage local du navigateur (IndexedDB ou `localStorage`) jusqu'à sa confirmation. Sur un appareil partagé, ce texte reste lisible par qui ouvre le même navigateur ; « Écritures en attente » permet de le jeter.
+- **Import depuis Notion** : le convertisseur est un script autonome, lancé à la main hors du serveur (essai à blanc par défaut, sans réseau) ; il n'ajoute aucune route à Carnet et n'est pas encore publié dans ce dépôt.
+
+### Limites connues
+
+- **Clés d'accès** testées avec un authentificateur logiciel (côté serveur) et l'authentificateur virtuel de Chromium ; **pas encore avec Face ID ou Touch ID réels**, ni dans Safari sur iPhone. Une clé est liée au nom d'hôte de l'application : changer d'adresse demande d'en enregistrer une nouvelle.
+- **iPhone réel non testé** : les recettes tournent en WebKit (le moteur de Safari) et en Chromium sur un iPhone émulé.
+- **Un processus malveillant sous le même utilisateur système** que Carnet peut lire la clé du serveur, signer des attestations, enrôler une clé logicielle ou tronquer la fin du journal des attestations (le chaînage ne détecte que les coupures au milieu). Les attestations protègent contre l'erreur et contre un agent naïf, pas contre ce cas (voir la contrainte 8).
+- **Écrivain externe** : la porte d'écriture ne protège que les écritures de Carnet. Un éditeur, git ou un agent qui écrit dans les quelques millisecondes entre la dernière vérification et le `rename` n'est pas détecté, et sa version peut être remplacée.
+- **Provenance** : une version écrite hors de Carnet est « auteur non vérifié ». Une page renommée et modifiée hors de Carnet sans propriété `id:` apparaît comme une suppression suivie d'une nouvelle page.
+- **Nouveautés** : une écriture faite par l'API de Carnet sous ton identité compte comme vue par toi. Un agent qui passerait par l'API avec ton compte, au lieu d'écrire le fichier, n'apparaîtrait donc pas dans Nouveautés (son écriture reste dans le journal d'attribution et dans l'historique).
+- **Clés d'accès par espace, pas par personne** : avec plusieurs comptes autorisés, une clé enregistrée par l'un peut confirmer une décision ouverte par l'autre. Le geste reste celui d'une personne présente devant un appareil enregistré ; l'attestation garde l'identité de la session.
+- **Statut écrit d'une décision** : la route des métadonnées (`POST /api/meta`) peut, comme n'importe quel éditeur du fichier, changer le `statut` déclaré d'une page `type: decision`. Ce statut n'est qu'une déclaration : la preuve affichée est toujours recalculée par le serveur à partir des attestations.
+- **Preuve liée à la demande, pas à l'emplacement** : une décision attestée suit sa page quand on la renomme ou la déplace ; une copie de la page (même identifiant, même proposition) affiche la même preuve. Elle prouve le geste sur cette proposition, pas le contexte qui l'entoure.
+
 ### Hors périmètre
 
 - Un attaquant qui contrôle déjà le proxy authentifiant, la machine hôte ou le dossier de pages.
 - Une personne autorisée qui écrit volontairement du contenu malveillant pour elle-même.
+- Un agent qui tourne sous le même utilisateur système que Carnet et veut délibérément forger une décision (voir « Limites connues »).
 - Le déni de service par un utilisateur autorisé.
 - Le contenu des pages lui-même : un agent trompé peut écrire un faux texte convaincant. Carnet empêche l'exécution de code, pas la désinformation. Relis ce que tes agents écrivent (le statut `à relire` est fait pour ça).
 

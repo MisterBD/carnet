@@ -93,8 +93,8 @@ describe("/_art", () => {
     }
   });
   test("base choisie d'après le Host (Tailscale)", async () => {
-    const r = await art(`${ART}/index.html`, { Host: "carnet.ts.net:8447" });
-    assert.match(String(r.entetes.location), /^https:\/\/carnet\.ts\.net:8446\/a\//);
+    const r = await art(`${ART}/index.html`, { Host: "carnet.ts.net:8443" });
+    assert.match(String(r.entetes.location), /^https:\/\/carnet\.ts\.net:8444\/a\//);
   });
   test("refus : traversées, cachés, contrôles, encodage invalide, liens hors du dossier, trop gros", async () => {
     const cas: [string, number][] = [

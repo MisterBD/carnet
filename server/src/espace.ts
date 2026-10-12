@@ -63,6 +63,10 @@ export interface Noeud {
   mtime: number;
   resume?: string;
   lectureSeule?: boolean;
+  /** V3 lot 6 : page archivée (`archive: true`) : l'interface la range dans le groupe replié « Archives ». */
+  archive?: boolean;
+  /** V3 lot 6 : page verrouillée (`verrou: true`) : cadenas dans l'arbre. */
+  verrou?: boolean;
 }
 
 export interface Changements {
@@ -120,6 +124,36 @@ function identiteDossier(st: fs.Stats): string {
   return `${st.ino}:${st.birthtimeMs}`;
 }
 
+// V3 lot 6 « Pages » : archive et modèles ------------------------------------------------------------------------
+/** Dossier des modèles de page (« Nouvelle page depuis un modèle »), à la racine de l'espace. */
+export const DOSSIER_MODELES = "Modèles";
+
+/** Page archivée : `archive: true` (booléen YAML) dans son en-tête. Hors des listes par défaut, jamais introuvable. */
+export function estArchivee(p: { fm: Record<string, unknown> | null }): boolean {
+  return p.fm !== null && p.fm.archive === true;
+}
+
+/**
+ * Page verrouillée : `verrou: true` (booléen YAML) dans son en-tête. Protection contre les FAUSSES MANIPULATIONS dans
+ * Carnet seulement (interface en lecture seule, routes d'édition refusées) : ce n'est PAS un contrôle d'accès, un agent
+ * ou Obsidian peuvent toujours écrire le fichier (et retirer le drapeau).
+ */
+export function contenuVerrouille(contenu: string): boolean {
+  const fm = lireFrontmatter(decouper(contenu).yaml);
+  return fm !== null && fm.verrou === true;
+}
+
+/** Page archivée d'après son contenu brut (`archive: true` dans l'en-tête). Lots 5 × 6. */
+export function contenuArchive(contenu: string): boolean {
+  const fm = lireFrontmatter(decouper(contenu).yaml);
+  return fm !== null && fm.archive === true;
+}
+
+/** Page du dossier « Modèles/ » (comparaison en NFC : un nom écrit en NFD par macOS est le même dossier). */
+export function estModele(chemin: string): boolean {
+  return chemin.normalize("NFC").startsWith(DOSSIER_MODELES + "/");
+}
+
 export function cleDisque(st: fs.Stats): string {
   return `${st.mtimeMs}:${st.ctimeMs}:${st.size}:${st.ino}`;
 }
@@ -129,7 +163,8 @@ export function construirePage(chemin: string, contenu: string, st: fs.Stats, li
   const fm = lireFrontmatter(d.yaml);
   const nom = feuille(chemin);
   const titreFm = fm ? texte(fm.title) : null;
-  const titre = (titreFm && titreFm.trim()) || (d.titreH1 && d.titreH1.trim()) || nom;
+  let titre = (titreFm && titreFm.trim()) || (d.titreH1 && d.titreH1.trim()) || nom;
+  if (titre.includes("{{") && estModele(chemin)) titre = nom; // lot 6 : un modèle « # {{titre}} » s'appelle par son nom
   let icone = fm ? texte(fm.icon) : null;
   if (!icone && fm && fm.pageDecoration && typeof fm.pageDecoration === "object" && !Array.isArray(fm.pageDecoration)) {
     const i = (fm.pageDecoration as Record<string, unknown>).icon;
@@ -178,6 +213,8 @@ export interface Resultat {
   extrait: string;
   apres: string;
   score: number;
+  /** Lot 6 : page archivée (seulement si la recherche les inclut). */
+  archive?: boolean;
 }
 
 export class Espace {
@@ -305,7 +342,9 @@ export class Espace {
     else {
       if (ancien.etag !== page.etag) ch.modifs.set(page.chemin, page.etag);
       if (ancien.titre !== page.titre || ancien.icone !== page.icone || ancien.ordre !== page.ordre
-        || ancien.resume !== page.resume || ancien.lien !== page.lien) ch.arbre = true;
+        || ancien.resume !== page.resume || ancien.lien !== page.lien
+        // lot 6 : archive et verrou se voient dans l'arbre (groupe « Archives », cadenas)
+        || estArchivee(ancien) !== estArchivee(page) || (ancien.fm?.verrou === true) !== (page.fm?.verrou === true)) ch.arbre = true;
     }
     this.pages.set(page.chemin, page);
   }
@@ -497,6 +536,8 @@ export class Espace {
       const n: Noeud = { chemin: p.chemin, nom: p.nom, titre: p.titre, icone: p.icone, existe: true, type: "page", enfants: [], mtime: p.mtime };
       if (p.resume) n.resume = p.resume;
       if (p.lien) n.lectureSeule = true;
+      if (estArchivee(p)) n.archive = true; // lot 6
+      if (p.fm !== null && p.fm.verrou === true) n.verrou = true;
       ordres.set(n, p.ordre);
       ajouter(dossierDe(p.chemin), n);
       parNom.set(p.chemin.slice(0, -3), n);
@@ -591,12 +632,33 @@ export class Espace {
     return [...this.pages.values()].filter((p) => !this.estAlias(p));
   }
 
-  rechercher(q: string, limite: number): Resultat[] {
+  /**
+   * Lot 6 : pages des listes « vivantes » (tâches du jour, à relire, récents, accueil, projets, décisions, bases,
+   * boîte) : sans les pages archivées ni les modèles. L'arbre, la recherche explicite et les liens directs les gardent.
+   */
+  pagesCourantes(): Page[] {
+    return this.pagesVisibles().filter((p) => !this.archivee(p) && !estModele(p.chemin));
+  }
+
+  /** Lot 6 : page archivée elle-même, ou rangée sous une page archivée (« A.md » archivée : « A/… » suit). */
+  archivee(p: Page): boolean {
+    if (estArchivee(p)) return true;
+    const segs = p.chemin.slice(0, -3).split("/");
+    for (let i = segs.length - 1; i > 0; i--) {
+      const parent = this.pages.get(segs.slice(0, i).join("/") + ".md");
+      if (parent && estArchivee(parent)) return true;
+    }
+    return false;
+  }
+
+  /** Recherche ; les pages archivées n'y sont que sur demande explicite (`archives`, filtre « Inclure les archives »). */
+  rechercher(q: string, limite: number, archives = false): Resultat[] {
     const termes = [...new Set(plier(q).split(/\s+/).filter(Boolean))].slice(0, 10);
     if (!termes.length) return [];
     const qp = termes.join(" ");
     const trouves: { p: Page; score: number }[] = [];
     for (const p of this.pagesVisibles()) {
+      if (!archives && this.archivee(p)) continue; // lot 6
       let score = 0;
       let ok = true;
       for (const t of termes) {
@@ -613,7 +675,9 @@ export class Espace {
       trouves.push({ p, score });
     }
     trouves.sort((a, b) => b.score - a.score || b.p.mtime - a.p.mtime);
-    return trouves.slice(0, limite).map(({ p, score }) => ({ chemin: p.chemin, titre: p.titre, icone: p.icone, ...this.#extrait(p, termes), score }));
+    return trouves.slice(0, limite).map(({ p, score }) => ({
+      chemin: p.chemin, titre: p.titre, icone: p.icone, ...this.#extrait(p, termes), score, ...(this.archivee(p) ? { archive: true } : {}),
+    }));
   }
 
   #extrait(p: Page, termes: string[]): { avant: string; extrait: string; apres: string } {

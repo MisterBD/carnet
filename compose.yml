@@ -41,6 +41,10 @@ services:
       # Défaut : @ + le prénom (une valeur vide désactiverait la détection, d'où ce défaut explicite).
       CARNET_MENTIONS: "${CARNET_MENTIONS:-@${CARNET_PRENOM:-Camille}}"
       CARNET_MASQUES: "${CARNET_MASQUES:-}"
+      CARNET_INBOX: "${CARNET_INBOX:-Inbox}"
+      CARNET_FUSEAU: "${CARNET_FUSEAU:-Europe/Paris}"
+      # Fichiers des agents, regroupés à part (« défaut » = AGENTS.md, CLAUDE.md, raw/… ; voir docs/deploiement.md).
+      CARNET_TECHNIQUES: "${CARNET_TECHNIQUES-défaut}"
       CARNET_PORT: "3020"
       # 0.0.0.0 DANS le conteneur ; le port n'est publié que sur 127.0.0.1 de l'hôte (voir « ports »).
       CARNET_HOTE: "0.0.0.0"
@@ -55,10 +59,12 @@ services:
       CARNET_ORIGINES_ARTEFACTS: "${CARNET_ORIGINES_ARTEFACTS:-http://127.0.0.1:3020=http://127.0.0.1:3006 http://localhost:3020=http://127.0.0.1:3006}"
       CARNET_CLE: /run/secrets/art-hmac.key
       CARNET_ART_TTL: "900"
-      # État hors des pages : favoris et instantanés de l'historique.
+      # État hors des pages : favoris, instantanés, journaux d'écriture, attestations des décisions, clés d'accès, nouveautés.
       CARNET_ETAT: /etat
       # Corbeille : jours avant l'effacement automatique (0 : jamais).
       CARNET_CORBEILLE_JOURS: "${CARNET_CORBEILLE_JOURS:-30}"
+      # Versions automatiques : minutes de pause après lesquelles l'enregistrement suivant garde la version d'avant (0 : jamais).
+      CARNET_PAUSE_VERSIONS: "${CARNET_PAUSE_VERSIONS:-10}"
       # Historique git (lecture seule) : auto, non, ou chemin d'un dossier git monté en lecture seule (voir docs/deploiement.md).
       CARNET_GIT: "${CARNET_GIT:-auto}"
       CARNET_GIT_PREFIXE: "${CARNET_GIT_PREFIXE:-}"
@@ -71,7 +77,7 @@ services:
       - "${CARNET_ESPACE_HOTE:-./demo}:/espace"
       # Clé de signature des liens d'artefacts : générée par scripts/initialiser.sh (chmod 600), partagée en lecture seule.
       - "./secrets/art-hmac.key:/run/secrets/art-hmac.key:ro"
-      # État hors des pages (favoris, instantanés).
+      # État hors des pages (favoris, instantanés, journaux, attestations, clés d'accès) : à sauvegarder.
       - "./.etat:/etat"
     mem_limit: 192m
     memswap_limit: 192m

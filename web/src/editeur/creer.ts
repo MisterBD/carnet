@@ -15,15 +15,19 @@ import type { ContexteEditeur } from "./contexte";
 import type { Analyseur } from "./fidelite";
 import {
   vueEncadre, vueWikilien, vueArtefact, vueImageBloc, vueImageEnLigne, vueElementListe, vueRepliable,
-  vueContenuRepliable, vueCode, vueSommaire, surSelectionCode,
+  vueContenuRepliable, vueCode, vueSommaire, surSelectionCode, vueCitation,
 } from "./vues";
 import { lowlightCarnet } from "./langues";
 import { extensionsComportement, envoyerImages, remplacerImage, choisirFichierImage, TYPES_IMAGES, ouvrirEditionLien } from "./comportements";
 import { extensionPoignee } from "./poignee";
+import { extensionSignet } from "./signet";
 import { Magasin } from "./ui/magasin";
 import { InterfaceEditeur } from "./ui/InterfaceEditeur";
 import { basculerTache } from "./menu";
 import { blocCourant, deplacer } from "./blocs";
+import { extensionTachesDatees } from "./taches-datees";
+import { extensionGardeLectureSeule, META_DISTANT, poserSource } from "./copier"; // lot 6 : page verrouillée = aucune modification du document
+import { estBlocBase, vueBase } from "../bases/vueBase";
 
 export interface OutilsClavier {
   inserer(): void;
@@ -91,11 +95,23 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     details: vueRepliable(contexte),
     detailsContent: vueContenuRepliable(),
     sommaire: vueSommaire(),
+    blockquote: vueCitation(), // lot 6 : bouton « Copier »
   };
 
   const CodeAvecVue = CodeBlockLowlight.extend({
     addAttributes() { return BlocCode.config.addAttributes!.call(this as never) as never; },
-    addNodeView() { return vueCode(contexte, magasin) as never; },
+    addNodeView() {
+      // Bloc ```base (lot 2 V3) : tableau vivant ; les autres blocs de code gardent leur vue.
+      // Passer de « base » à un autre langage (ou l'inverse) recrée la vue.
+      const code = vueCode(contexte, magasin);
+      const base = vueBase(contexte);
+      return ((p: Parameters<typeof code>[0]) => {
+        const genre = estBlocBase(p.node);
+        const v = genre ? base(p) : code(p);
+        const maj = v.update;
+        return { ...v, update: (n: Parameters<typeof maj>[0]) => estBlocBase(n) === genre && maj(n) };
+      }) as never;
+    },
   }).configure({ lowlight: lowlightCarnet, defaultLanguage: null, enableTabIndentation: false, HTMLAttributes: { spellcheck: "false" } });
 
   const schema: AnyExtension[] = extensionsSchema().map((e) => {
@@ -106,6 +122,7 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
 
   const extensions: AnyExtension[] = [
     ...schema,
+    extensionTachesDatees((m) => contexte.notifier(m)),
     UndoRedo.configure({ depth: 200, newGroupDelay: 600 }),
     Dropcursor.configure({ color: "var(--indigo)", width: 2, class: "carnet-depose" }),
     Gapcursor,
@@ -131,6 +148,8 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     }),
     ...extensionsComportement(contexte, magasin),
     extensionPoignee(magasin),
+    extensionSignet(magasin),
+    extensionGardeLectureSeule,
   ];
 
   let silencieux = 0;
@@ -151,7 +170,15 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     onSelectionUpdate: () => { surSelectionCode(); },
     onFocus: () => { magasin.maj({ focus: true }); },
     onBlur: () => { magasin.maj({ focus: false }); },
-    onUpdate: () => {
+    onUpdate: ({ transaction }) => {
+      // `setEditable` émet un « update » sans modification (page verrouillée / déverrouillée, lot 6) : ce n'est pas une
+      // saisie. On ferme les menus et on rafraîchit l'interface flottante (masquée en lecture seule).
+      if (!transaction.docChanged) {
+        magasin.fermerTout();
+        if (!editor.isEditable && magasin.lire().slash.ouvert) magasin.majSlash({ ouvert: false, range: null });
+        magasin.maj({ rev: magasin.lire().rev + 1 });
+        return;
+      }
       if (silencieux > 0) return;
       // Toute modification hors chargement et mise à jour en direct vient de la personne (clavier, menus flottants, boutons)
       options.surInteraction?.();
@@ -164,6 +191,7 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     },
   });
   magasin.editeur = editor;
+  poserSource(editor, corps); // lot 6 : « Copier » retrouve le texte du fichier
 
   // Contenu initial : document construit par notre couche Markdown, sans passer pour une modification
   const poser = (md: string) => {
@@ -176,13 +204,13 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     }
     editor.view.updateState(etat);
     // le nœud de fin (paragraphe après un tableau…) est ajouté par appendTransaction au premier tour : on le force
-    editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false));
+    editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false).setMeta(META_DISTANT, true));
   };
   silencieux++;
   editor.view.updateState(EditorState.create({ doc: mdVersDoc(corps, editor.schema), schema: editor.schema }));
   editor.mount(racine);
   // le nœud de fin (paragraphe après un tableau…) est ajouté par appendTransaction au premier tour : on le force
-  editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false));
+  editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false).setMeta(META_DISTANT, true));
   silencieux--;
 
   const getMarkdown = () => prefixe + docVersMd(editor.state.doc);
@@ -218,7 +246,7 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     else editor.commands.focus("start");
   };
 
-  const outils: OutilsClavier = {
+  const outilsBruts: OutilsClavier = {
     inserer: () => {
       const { $from, empty } = editor.state.selection;
       const vide = $from.parent.type.name === "paragraph" && $from.parent.content.size === 0 && empty;
@@ -263,6 +291,10 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     annuler: () => { editor.chain().focus().undo().run(); },
     retablir: () => { editor.chain().focus().redo().run(); },
   };
+  // lot 6 : page verrouillée = barre au-dessus du clavier inactive (chaque action vérifie au moment du geste)
+  const outils = Object.fromEntries(Object.entries(outilsBruts).map(([k, f]) => [k, (...a: unknown[]) => {
+    if (editor.isEditable) (f as (...x: unknown[]) => void)(...a);
+  }])) as unknown as OutilsClavier;
 
   return {
     getMarkdown,
@@ -273,6 +305,7 @@ export async function creerEditeur(racine: HTMLElement, corps: string, contexte:
     magasin,
     remplacer: (md: string) => {
       silencieux++;
+      poserSource(editor, md);
       try { poser(md); } finally {
         window.setTimeout(() => { silencieux--; }, 200);
       }

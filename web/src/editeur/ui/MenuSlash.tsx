@@ -4,11 +4,27 @@ import type { Magasin } from "./magasin";
 import { useMagasin, ICONES, garderFocus, sansFocus } from "./communs";
 import { usePosition } from "./position";
 
+/** Hauteur maximale du menu « / » (px). */
+const PLAFOND = 400;
+
+// Fusion vague 2 (recette.py « / » → Sous-page) : un bandeau qui apparaît au-dessus (« Modifiée depuis ta dernière
+// lecture », lot 3) fait glisser le menu sous un pointeur IMMOBILE ; le navigateur signale alors un survol (mouseenter,
+// et un mousemove synthétique aux mêmes coordonnées) et l'entrée active sautait sous le doigt : Entrée choisissait
+// « Titre 2 ». Seul un VRAI déplacement du pointeur change l'entrée active.
+let pointeur: { x: number; y: number } | null = null;
+let pointeurABouge = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("mousemove", (e) => {
+    pointeurABouge = !pointeur || pointeur.x !== e.clientX || pointeur.y !== e.clientY;
+    pointeur = { x: e.clientX, y: e.clientY };
+  }, { capture: true, passive: true });
+}
+
 export function MenuSlash({ magasin }: { magasin: Magasin }) {
   const { slash } = useMagasin(magasin);
   const ref = useRef<HTMLDivElement>(null);
   const liste = useRef<HTMLDivElement>(null);
-  const pos = usePosition(ref, slash.ouvert ? slash.rect : null, "bottom-start", 8, slash.entrees.length);
+  const pos = usePosition(ref, slash.ouvert ? slash.rect : null, "bottom-start", 8, slash.entrees.length, PLAFOND);
 
   useEffect(() => {
     const el = liste.current?.querySelector<HTMLElement>("[data-actif='true']");
@@ -31,7 +47,7 @@ export function MenuSlash({ magasin }: { magasin: Magasin }) {
   let groupe = "";
   return (
     <div ref={ref} id="carnet-menu-slash" className="carnet-menu carnet-menu-slash" role="listbox" onMouseDown={sansFocus} aria-label="Insérer un bloc"
-      style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, maxHeight: pos ? Math.min(pos.hMax, 400) : undefined }}>
+      style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999, maxHeight: pos ? Math.min(pos.hMax, PLAFOND) : PLAFOND }}>
       <div ref={liste} className="carnet-menu__defile">
         {slash.entrees.length === 0 && (
           <div className="carnet-menu__vide">Aucun bloc ne correspond à « {slash.requete} ». Échap pour garder le texte.</div>
@@ -45,7 +61,7 @@ export function MenuSlash({ magasin }: { magasin: Magasin }) {
               <button type="button" id={`carnet-slash-${i}`} role="option" aria-selected={i === slash.index} data-actif={i === slash.index}
                 className="carnet-menu__entree" data-cle={e.cle}
                 onPointerDown={garderFocus}
-                onMouseEnter={() => magasin.majSlash({ index: i })}
+                onMouseMove={() => { if (pointeurABouge && i !== slash.index) magasin.majSlash({ index: i }); }}
                 onClick={() => slash.executer?.(e)}>
                 <span className="carnet-menu__icone" data-icone={e.icone}><Ic size={19} strokeWidth={1.8} /></span>
                 <span className="carnet-menu__textes">

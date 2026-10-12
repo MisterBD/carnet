@@ -1,5 +1,6 @@
-// Routes : « / » accueil, « /p/<chemin de page sans .md> », « /f/<fichier> », « /projets », « /corbeille »,
-// « /h/<chemin de page sans .md> » (historique des versions d'une page).
+// Routes : « / » Aujourd'hui (l'accueil de l'appli, distinct de la page Accueil.md), « /boite » (boîte de réception), « /p/<chemin de page sans .md> », « /f/<fichier> », « /projets », « /corbeille »,
+// « /h/<chemin de page sans .md> » (historique des versions d'une page), « /prep/<chemin de fiche sans .md> » (dossier de
+// rendez-vous, lot 11).
 // L'historique du navigateur porte une profondeur (`carnet`) : le bouton retour de l'en-tête sait s'il peut revenir
 // en arrière dans Carnet (appli installée sur l'iPhone : pas de bouton retour de Safari) ou s'il doit remonter au parent.
 import { useEffect, useState } from "react";
@@ -9,8 +10,20 @@ export type Route =
   | { vue: "page"; chemin: string }
   | { vue: "fichier"; chemin: string }
   | { vue: "projets" }
+  | { vue: "missions" } // lot 10
   | { vue: "corbeille" }
-  | { vue: "historique"; chemin: string };
+  | { vue: "boite" }
+  | { vue: "historique"; chemin: string }
+  // lot 3 « Agents »
+  | { vue: "decisions" }
+  | { vue: "nouveautes" }
+  | { vue: "cles" }
+  // lot 5 « Fiabilité »
+  | { vue: "attente" }
+  // lot 6 « Pages » : ouvre (et crée au besoin) le journal du jour, puis remplace l'adresse par la page
+  | { vue: "journal" }
+  // lot 11 « Dossier de rendez-vous »
+  | { vue: "preparation"; chemin: string };
 
 function segments(s: string): string {
   return s.split("/").filter(Boolean).map((x) => { try { return decodeURIComponent(x); } catch { return x; } }).join("/");
@@ -25,9 +38,20 @@ export function lireRoute(chemin = location.pathname): Route {
     const nom = segments(chemin.slice(3));
     return nom ? { vue: "historique", chemin: nom.normalize("NFC") + ".md" } : { vue: "accueil" };
   }
+  if (chemin.startsWith("/prep/")) {
+    const nom = segments(chemin.slice(6));
+    return nom ? { vue: "preparation", chemin: nom.normalize("NFC") + ".md" } : { vue: "accueil" };
+  }
   if (chemin.startsWith("/f/")) return { vue: "fichier", chemin: segments(chemin.slice(3)).normalize("NFC") };
   if (chemin === "/projets") return { vue: "projets" };
+  if (chemin === "/missions") return { vue: "missions" }; // lot 10
   if (chemin === "/corbeille") return { vue: "corbeille" };
+  if (chemin === "/boite") return { vue: "boite" };
+  if (chemin === "/decisions") return { vue: "decisions" };
+  if (chemin === "/nouveautes") return { vue: "nouveautes" };
+  if (chemin === "/cles") return { vue: "cles" };
+  if (chemin === "/attente") return { vue: "attente" };
+  if (chemin === "/journal") return { vue: "journal" };
   return { vue: "accueil" };
 }
 
@@ -36,9 +60,17 @@ export function urlDe(route: Route): string {
   switch (route.vue) {
     case "page": return "/p/" + enc(route.chemin.replace(/\.md$/i, ""));
     case "historique": return "/h/" + enc(route.chemin.replace(/\.md$/i, ""));
+    case "preparation": return "/prep/" + enc(route.chemin.replace(/\.md$/i, ""));
     case "fichier": return "/f/" + enc(route.chemin);
     case "projets": return "/projets";
+    case "missions": return "/missions"; // lot 10
     case "corbeille": return "/corbeille";
+    case "boite": return "/boite";
+    case "decisions": return "/decisions";
+    case "nouveautes": return "/nouveautes";
+    case "cles": return "/cles";
+    case "attente": return "/attente";
+    case "journal": return "/journal";
     default: return "/";
   }
 }
@@ -50,13 +82,50 @@ function profondeur(): number {
   return typeof s?.carnet === "number" ? s.carnet : 0;
 }
 
-export function naviguer(route: Route, remplacer = false): void {
+/**
+ * Ouvre une route. `ancre` (titre visé par un lien [[Page#Titre]], #5) est portée dans l'adresse (« #Cette%20semaine ») :
+ * la page y défile une fois affichée. Même page avec une ancre : on défile sans recharger (événement `carnet:ancre`).
+ */
+export function naviguer(route: Route, remplacer = false, ancre: string | null = null): void {
   const url = urlDe(route);
-  if (url === location.pathname) return;
-  if (remplacer) history.replaceState({ carnet: profondeur() }, "", url);
-  else history.pushState({ carnet: profondeur() + 1 }, "", url);
+  const diese = ancre ? "#" + encodeURIComponent(ancre) : "";
+  if (url === location.pathname) {
+    if (diese && decodeURIComponent(location.hash) !== decodeURIComponent(diese)) {
+      history.pushState({ carnet: profondeur() + 1 }, "", url + diese);
+    }
+    if (diese) window.dispatchEvent(new CustomEvent("carnet:ancre", { detail: ancre }));
+    return;
+  }
+  if (remplacer) history.replaceState({ carnet: profondeur() }, "", url + diese);
+  else history.pushState({ carnet: profondeur() + 1 }, "", url + diese);
   noterRoute(route);
   auditeurs.forEach((f) => f());
+}
+
+/** Ancre de l'adresse courante (« Cette semaine »), ou null. */
+export function ancreCourante(): string | null {
+  if (!location.hash || location.hash === "#") return null;
+  try { return decodeURIComponent(location.hash.slice(1)); } catch { return location.hash.slice(1); }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Instance de la page ouverte (K2-02) : un renommage depuis le titre garde la même vue (même éditeur, même curseur,
+// même file d'enregistrement) ; seule l'adresse change. Toute autre navigation crée une vue neuve.
+// ---------------------------------------------------------------------------------------------
+
+let instance: { cle: string; chemin: string } | null = null;
+let generation = 0;
+
+/** Clé React de la vue d'une page : stable tant que la page reste ouverte, même renommée sur place. */
+export function clePage(chemin: string): string {
+  if (instance && instance.chemin === chemin) return instance.cle;
+  instance = { cle: `${chemin}\u0001${++generation}`, chemin };
+  return instance.cle;
+}
+
+/** La page ouverte `ancien` vient d'être renommée en `nouveau` par sa propre vue : la vue est gardée. */
+export function renommerSurPlace(ancien: string, nouveau: string): void {
+  if (instance && instance.chemin === ancien) instance.chemin = nouveau;
 }
 
 /** Une page précédente de Carnet existe dans l'historique du navigateur (pas une autre page web). */
