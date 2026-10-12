@@ -63,15 +63,15 @@ describe("Host (anti DNS-rebinding)", () => {
     }
   });
   test("Host Tailscale avec port : base d'artefacts associée + CSP", async () => {
-    const r = await b.req("GET", "/api/config", { entetes: { Host: "carnet.ts.net:8447" } });
+    const r = await b.req("GET", "/api/config", { entetes: { Host: "carnet.ts.net:8443" } });
     assert.equal(r.statut, 200);
-    assert.equal(r.json.artBase, "https://carnet.ts.net:8446");
-    assert.match(String(r.entetes["content-security-policy"]), /frame-src 'self' https:\/\/carnet\.ts\.net:8446;/);
+    assert.equal(r.json.artBase, "https://carnet.ts.net:8444");
+    assert.match(String(r.entetes["content-security-policy"]), /frame-src 'self' https:\/\/carnet\.ts\.net:8444;/);
   });
   test("Host Tailscale SANS port : accepté (table connaît l'hôte)", async () => {
     const r = await b.req("GET", "/api/config", { entetes: { Host: "carnet.ts.net", "X-Forwarded-Proto": "https" } });
     assert.equal(r.statut, 200);
-    assert.equal(r.json.artBase, "https://carnet.ts.net:8446");
+    assert.equal(r.json.artBase, "https://carnet.ts.net:8444");
   });
   test("Host connu mais mauvais port : 421", async () => {
     const r = await b.req("GET", "/api/config", { entetes: { Host: "carnet.ts.net:8445" } });

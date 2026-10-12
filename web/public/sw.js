@@ -8,7 +8,7 @@
 //   - Tout le reste (API, SSE, images de l'espace, artefacts…) : jamais touché, passe directement au réseau.
 //
 // Pour changer le cache (nouvelle coquille), incrémenter VERSION : l'ancien cache est supprimé à l'activation.
-const VERSION = "v4"; // v4 : écran de repli aux textes configurables (CARNET_RESEAU)
+const VERSION = "v5"; // v5 : écran de repli qui signale les saisies non enregistrées (lot 5) ; v4 : textes configurables
 const CACHE_COQUILLE = `carnet-coquille-${VERSION}`;
 const CACHE_ASSETS = "carnet-assets"; // noms à empreinte : on le garde d'une version à l'autre, avec un plafond
 const MAX_ASSETS = 48;

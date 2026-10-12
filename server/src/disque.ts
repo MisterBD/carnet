@@ -145,8 +145,12 @@ export async function fsyncDossier(dossier: string): Promise<void> {
  * Écriture atomique : fichier temporaire caché dans le même dossier (`.<nom>.carnet-<aléa>.tmp`), fsync, mêmes
  * permissions que l'original (sinon `mode`, 0644 par défaut), puis rename (ou link si `exclusif` : jamais
  * d'écrasement), puis fsync du dossier. La cible ne doit pas être un lien symbolique (vérifié par l'appelant).
+ * `avantRenommage` : appelé après l'écriture du temporaire et juste avant le rename ; s'il lève, rien n'est remplacé.
  */
-export async function ecrireAtomique(abs: string, donnees: string | Buffer, opts: { exclusif?: boolean; mode?: number } = {}): Promise<fs.Stats> {
+export async function ecrireAtomique(
+  abs: string, donnees: string | Buffer,
+  opts: { exclusif?: boolean; mode?: number; avantRenommage?: () => Promise<void> } = {},
+): Promise<fs.Stats> {
   const dossier = path.dirname(abs);
   const nom = path.basename(abs);
   const tmp = path.join(dossier, `.${nom.slice(0, 200)}.carnet-${crypto.randomBytes(6).toString("hex")}.tmp`);
@@ -171,6 +175,8 @@ export async function ecrireAtomique(abs: string, donnees: string | Buffer, opts
   }
   await fh.close();
   try {
+    // dernière vérification juste avant de rendre visible (réduit la fenêtre face aux écrivains externes)
+    if (opts.avantRenommage) await opts.avantRenommage();
     if (opts.exclusif) {
       await fsp.link(tmp, abs); // EEXIST si la cible existe déjà : pas d'écrasement
       await fsp.unlink(tmp);

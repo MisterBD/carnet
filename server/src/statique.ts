@@ -29,6 +29,8 @@ const TYPES: Record<string, string> = {
   ".otf": "font/otf",
   ".wasm": "application/wasm",
 };
+/** Premiers segments des routes de l'application (repli sur index.html quelle que soit l'extension). */
+const ROUTES_APPLI = new Set(["p", "h", "f"]);
 const COMPRESSIBLES = new Set([".html", ".js", ".mjs", ".css", ".json", ".map", ".webmanifest", ".txt", ".svg", ".wasm", ".ttf", ".otf", ".ico"]);
 
 interface EnCache {
@@ -89,6 +91,12 @@ export class Statique {
     if (segs[0] === "assets") throw new ErreurHttp(404, "Introuvable.", "statique_introuvable");
     if (segs.length === 1 && (segs[0] === "sw.js" || segs[0] === "manifest.webmanifest" || segs[0] === "favicon.ico")) {
       throw new ErreurHttp(404, "Introuvable.", "statique_introuvable");
+    }
+    // Fichier statique absent (extension connue, hors .html) : un 404 net plutôt que la page de l'application. Les routes
+    // de l'appli (/p/ page, /h/ historique, /f/ fichier) gardent le repli : une page peut s'appeler « rapport.txt ».
+    if (sur && segs.length && !ROUTES_APPLI.has(segs[0])) {
+      const ext = path.extname(segs[segs.length - 1]).toLowerCase();
+      if (ext !== ".html" && TYPES[ext]) throw new ErreurHttp(404, "Introuvable.", "statique_introuvable");
     }
     const index = await this.#lire(racineReelle, path.join(racineReelle, "index.html"));
     if (!index) return this.#absente(res);

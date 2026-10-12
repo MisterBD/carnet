@@ -4,7 +4,13 @@ import fsp from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { nomSuitLeTitre, titreDe } from "../../shared/navigation.ts";
+import { dateDuJour } from "../../shared/identifiants.ts";
 import { decouper, dossierDe, feuille, nomDeFichier, plier, poserChamp, remplacerTexteH1 } from "../../shared/page.ts";
+import { lireProprietes, poserPropriete } from "../../shared/proprietes.ts";
+import type { TypePropriete, ValeurPropriete } from "../../shared/proprietes.ts";
+import { analyserTache, modifierTache } from "../../shared/taches.ts";
+import type { ChangementsTache, Priorite } from "../../shared/taches.ts";
+import { Agents } from "./agents.ts";
 import { listerArtefacts } from "./art.ts";
 import {
   assurerCorbeille, cheminElement, compterPages, decrireElement, effacerElement, FICHIER_META, lireTexteDans, listerCorbeille,
@@ -16,18 +22,33 @@ import {
   creerDossiers, ecrireAtomique, etagDe, fsyncDossier, horodatage, lireConfine, lstatOuNull, ouvrirConfine, resoudre, verifierEcriture,
 } from "./disque.ts";
 import type { Verrou } from "./disque.ts";
-import { collateur, lireFrontmatter, texte } from "./espace.ts";
+import { collateur, contenuVerrouille, lireFrontmatter, texte } from "./espace.ts";
 import type { Changements, Espace, Page } from "./espace.ts";
+import { Ecrivain, REVISION_EXISTANTE } from "./ecriture.ts";
+import type { DemandeEcriture } from "./ecriture.ts";
+import { sha256 } from "./journal-ecritures.ts";
 import { chaine, envoyerJson, ErreurHttp, journal, lireCorps, lireJson, normEtag } from "./http.ts";
 import { Instantanes, RE_HASH, RE_INSTANTANE } from "./historique.ts";
 import type { Git } from "./historique.ts";
 import { retroliens, texteApercu } from "./liens.ts";
-import { deplacement, marquerCode, reecrireLiens, RE_TACHE } from "./markdown.ts";
+import { routesMissions } from "./missions.ts"; // lot 10
+import { deplacement, marquerCode, reecrireLiens } from "./markdown.ts";
 import {
   cheminAutorise, cheminPage, CSP_FICHIER, EXT_IMAGES, EXT_TELECHARGEMENT, exigerZoneAutorisee, extension, MIME_IMAGE, reelAutorise, typeImage,
   zoneInterdite,
 } from "./securite.ts";
 import type { Diffuseur } from "./sse.ts";
+import { routesAujourdhui } from "./routes-aujourdhui.ts";
+import { routesPages } from "./pages.ts";
+// V3 lot 2 « Bases »
+import { Bases, erreurBase, lireChangement, lireSource, lireVue, typeSocle } from "./bases.ts";
+import { CLES_PROVENANCE, lireDeclaration, validerSaisie } from "../../shared/bases.ts";
+import type { DeclarationPropriete, ErreurBase, ValeurSaisie } from "../../shared/bases.ts";
+import { changerVues, estChangementDeVues, etatVue, lireDefinition, poserAujourdhui, reecrireVue } from "./bases-yaml.ts";
+import { estTechnique } from "../../shared/techniques.ts";
+// V3 lot 5 « Fiabilité »
+import { barriereRestauration, Fiabilite } from "./fiabilite.ts";
+import { Preparations } from "./preparation.ts"; // lot 11 « Dossier de rendez-vous »
 
 const MAX_PAGE = 2 * 1024 * 1024;
 const MAX_LECTURE = 5 * 1024 * 1024;
@@ -53,12 +74,30 @@ function json(ctx: Ctx, statut: number, objet: unknown, entetes: Record<string, 
   envoyerJson(ctx.req, ctx.res, statut, objet, entetes);
 }
 
+/** Identifiant d'idempotence envoyé par le client (en-tête X-Carnet-Requete, UUID par geste), validé par Ecrivain. */
+function requeteDe(ctx: Ctx): string | undefined {
+  const v = ctx.req.headers["x-carnet-requete"];
+  return typeof v === "string" ? v.trim() : undefined;
+}
+
+/** Révision de la source (If-Match, facultatif) et idempotence d'un renommage / déplacement / suppression. */
+function mouvementDe(ctx: Ctx): { revision?: string; requete?: string } {
+  const ifMatch = ctx.req.headers["if-match"];
+  const requete = requeteDe(ctx);
+  return {
+    ...(ifMatch !== undefined && ifMatch.trim() !== "*" ? { revision: normEtag(ifMatch.split(",")[0]) } : {}),
+    ...(requete !== undefined ? { requete } : {}),
+  };
+}
+
 /** Segments du dossier « X/ » associé à la page « X.md ». */
 function dossierDePage(segs: string[]): string[] {
   return [...segs.slice(0, -1), segs[segs.length - 1].slice(0, -3)];
 }
 
 const RE_CLE_META = /^[A-Za-z_][\w-]{0,63}$/;
+/** Lot 6 : drapeaux de page portés par l'en-tête (`verrou: true`, `archive: true`). */
+const CLES_PAGES = new Set(["verrou", "archive"]);
 
 export class Api {
   cfg: Config;
@@ -67,7 +106,14 @@ export class Api {
   verrou: Verrou;
   git: Git;
   instantanes: Instantanes;
+  /** Porte d'écriture unique des pages (server/src/ecriture.ts). */
+  ecrivain: Ecrivain;
+  /** Dossier de rendez-vous (lot 11, server/src/preparation.ts). */
+  preparations: Preparations;
   routes: Map<string, Gestionnaire>;
+  bases: Bases;
+  /** Lot 3 : décisions, nouveautés, fichiers des agents, clés d'accès. */
+  agents: Agents;
   #minuteurPurge: ReturnType<typeof setInterval> | null = null;
   /** Renommages réussis récents : une requête rejouée (Entrée puis perte de focus) reçoit la même réponse. */
   #renommages: { t: number; source: string; nom?: string; titre?: string; cible: string }[] = [];
@@ -78,7 +124,10 @@ export class Api {
     this.diffuseur = diffuseur;
     this.verrou = verrou;
     this.git = git;
-    this.instantanes = new Instantanes(cfg);
+    this.ecrivain = new Ecrivain(cfg, espace, verrou, (ch) => this.#publier(ch));
+    this.instantanes = this.ecrivain.instantanes;
+    this.bases = new Bases(cfg, espace);
+    this.preparations = new Preparations(cfg, espace, this.ecrivain);
     this.routes = new Map<string, Gestionnaire>([
       ["GET /api/config", (c) => this.config(c)],
       ["GET /api/arbre", (c) => this.arbre(c)],
@@ -95,6 +144,7 @@ export class Api {
       ["GET /api/accueil", (c) => this.accueil(c)],
       ["POST /api/tache", (c) => this.tache(c)],
       ["GET /api/projets", (c) => this.projets(c)],
+      ...routesMissions(this), // lot 10 « Missions vivantes » (lecture seule)
       ["POST /api/meta", (c) => this.meta(c)],
       ["GET /api/favoris", (c) => this.lireFavoris(c)],
       ["PUT /api/favoris", (c) => this.ecrireFavoris(c)],
@@ -112,7 +162,29 @@ export class Api {
       ["GET /api/retroliens", (c) => this.retroliens(c)],
       ["GET /api/apercu", (c) => this.apercu(c)],
       ["GET /api/couvertures", (c) => this.couvertures(c)],
+      ["GET /api/attestations", (c) => this.listerAttestations(c)],
+      ...routesAujourdhui(this), // lot 1 « Aujourd'hui »
+      ...routesPages(this), // lot 6 « Pages » : modèles, journal du jour
+      // V3 lot 2 « Bases »
+      ["GET /api/base", (c) => this.lireBase(c)],
+      ["POST /api/base/evaluer", (c) => this.evaluerBase(c)],
+      ["POST /api/base/reecrire", (c) => this.reecrireBase(c)],
+      ["POST /api/base/dossier", (c) => this.dossierBase(c)],
+      ["GET /api/bases/destinations", (c) => this.destinationsBases(c)], // K10-01
+      ["GET /api/proprietes", (c) => this.lireProprietes(c)],
+      ["POST /api/propriete", (c) => this.ecrirePropriete(c)],
+      ["POST /api/base/entree", (c) => this.entreeBase(c)],
+      // lot 11 « Dossier de rendez-vous »
+      ["GET /api/preparation", (c) => this.preparations.apercu(c)],
+      ["GET /api/preparation/etat", (c) => this.preparations.etat(c)],
+      ["POST /api/preparation/conserver", (c) => this.preparations.conserver(c)],
     ]);
+    this.agents = new Agents(cfg, espace, this.ecrivain);
+    // Intégration lots 3 et 11 : un fichier des agents est « non accessible » pour le dossier de rendez-vous.
+    this.preparations.technique = (c) => estTechnique(cfg.techniques, c);
+    for (const [cle, g] of this.agents.routes()) this.routes.set(cle, g);
+    // Lot 5 : copie de conflit, retour à la version marquée vue, écritures indéterminées
+    for (const [cle, g] of new Fiabilite(cfg, espace, this.ecrivain, this.agents.nouveautes).routes()) this.routes.set(cle, g);
   }
 
   async gerer(ctx: Ctx): Promise<void> {
@@ -138,6 +210,7 @@ export class Api {
       historique: { git: this.git.actif }, corbeille: { jours: this.cfg.corbeilleJours },
       // Mentions qui placent une page dans « À relire » ; réseau et contact cités par les écrans hors ligne et d'erreur.
       mentions: this.cfg.mentions, reseau: this.cfg.reseau || null, contact: this.cfg.contact || null,
+      inbox: this.cfg.inbox.join("/"), fuseau: this.cfg.fuseau, // lot 1
     });
   }
 
@@ -161,7 +234,14 @@ export class Api {
     try {
       const { contenu, st } = await lireConfine(this.cfg, await resoudre(this.cfg, segs), MAX_LECTURE);
       const etag = etagDe(contenu);
-      json(ctx, 200, { chemin: segs.join("/"), contenu, etag, mtime: Math.floor(st.mtimeMs) }, { ETag: etag });
+      // page `type: decision` : preuve calculée par le serveur, hors du Markdown
+      // (lot 3 : même preuve que le socle, plus la date et le contrôle du chaînage du journal des attestations)
+      const preuve = await this.agents.preuvePage(segs.join("/"), contenu);
+      // page `type: preparation` (lot 11) : « à rafraîchir » calculé (révisions des sources), hors du Markdown
+      const preparation = await this.preparations.etatDePage(segs.join("/"));
+      json(ctx, 200, {
+        chemin: segs.join("/"), contenu, etag, mtime: Math.floor(st.mtimeMs), ...(preuve ? { preuveDecision: preuve } : {}), ...(preparation ? { preparation } : {}),
+      }, { ETag: etag });
     } catch (e) {
       if (e instanceof ErreurHttp && e.statut === 404) {
         const d = await lstatOuNull(await resoudre(this.cfg, dossierDePage(segs)));
@@ -187,42 +267,41 @@ export class Api {
     const corps = await lireJson(ctx.req, MAX_PAGE + 64 * 1024);
     const contenu = chaine(corps.contenu, "contenu", Infinity);
     if (Buffer.byteLength(contenu) > MAX_PAGE) throw new ErreurHttp(413, "Page trop volumineuse (maximum 2 Mo).", "trop_gros");
+    if (corps.ecraser !== undefined && typeof corps.ecraser !== "boolean") throw new ErreurHttp(400, "Champ « ecraser » invalide.", "champ_invalide");
+    const ecraser = corps.ecraser === true;
     const ifMatch = ctx.req.headers["if-match"];
     const ifNone = ctx.req.headers["if-none-match"];
+    const demande: Omit<DemandeEcriture, "revision"> = {
+      chemin: segs, action: "page", transformer: () => contenu, requete: requeteDe(ctx), operation: { contenu: sha256(contenu), ecraser }, ecraser,
+    };
     await this.verrou.executer(async () => {
-      const { abs, st } = await verifierEcriture(this.cfg, segs);
-      let stNouveau: fs.Stats;
-      if (st) {
-        if (!st.isFile()) throw new ErreurHttp(409, "Ce chemin n'est pas un fichier.", "pas_un_fichier");
-        const a = await this.#actuel(abs);
-        if (!a) throw new ErreurHttp(409, "Page illisible.", "illisible");
-        if (ifNone !== undefined && ifNone.trim() === "*") throw new ErreurHttp(412, "La page existe déjà.", "existe", { etag: a.etag, contenu: a.contenu });
-        if (ifMatch === undefined) throw new ErreurHttp(412, "En-tête If-Match obligatoire pour modifier une page existante.", "if_match_absent", { etag: a.etag, contenu: a.contenu });
-        if (ifMatch.trim() !== "*" && !ifMatch.split(",").some((v) => normEtag(v) === a.etag)) {
-          throw new ErreurHttp(412, "La page a été modifiée ailleurs.", "etag_discordant", { etag: a.etag, contenu: a.contenu });
+      let revision: string | null;
+      if (ifNone !== undefined && ifNone.trim() === "*") revision = null;
+      else if (ifMatch !== undefined && ifMatch.trim() !== "*") {
+        // « If-Match: * » (écrasement aveugle) n'est plus accepté : révision exacte, ou `ecraser` avec l'etag du 412
+        const liste = ifMatch.split(",").map(normEtag);
+        revision = liste[0];
+        if (liste.length > 1) {
+          const a = await this.#actuel(await resoudre(this.cfg, segs));
+          if (a && liste.includes(a.etag)) revision = a.etag;
         }
-        if (a.contenu === contenu) {
-          json(ctx, 200, { etag: a.etag, mtime: Math.floor(st.mtimeMs) }, { ETag: a.etag });
+      } else {
+        const rejeu = await this.ecrivain.rejeuSousVerrou(demande, ctx.login);
+        if (rejeu) {
+          json(ctx, 200, { etag: rejeu.etag, mtime: rejeu.mtime, rejoue: true }, { ETag: rejeu.etag });
           return;
         }
-        stNouveau = await ecrireAtomique(abs, contenu);
-      } else {
-        if (ifMatch !== undefined) throw new ErreurHttp(412, "La page n'existe plus.", "page_absente", { etag: null, contenu: null });
-        if (ifNone === undefined || ifNone.trim() !== "*") throw new ErreurHttp(428, "En-tête If-None-Match: * obligatoire pour créer une page.", "if_none_match_absent");
-        await creerDossiers(this.cfg, path.dirname(abs));
-        try {
-          stNouveau = await ecrireAtomique(abs, contenu, { exclusif: true });
-        } catch (e) {
-          if (e instanceof ErreurHttp && e.raison === "existe") {
-            const a = await this.#actuel(abs);
-            throw new ErreurHttp(412, "La page existe déjà.", "existe", { etag: a?.etag ?? null, contenu: a?.contenu ?? null });
-          }
-          throw e;
+        const { abs, st } = await verifierEcriture(this.cfg, segs);
+        if (st) {
+          if (!st.isFile()) throw new ErreurHttp(409, "Ce chemin n'est pas un fichier.", "pas_un_fichier");
+          const a = await this.#actuel(abs);
+          if (!a) throw new ErreurHttp(409, "Page illisible.", "illisible");
+          throw new ErreurHttp(412, "En-tête If-Match obligatoire pour modifier une page existante.", "if_match_absent", { etag: a.etag, contenu: a.contenu });
         }
+        throw new ErreurHttp(428, "En-tête If-None-Match: * obligatoire pour créer une page.", "if_none_match_absent");
       }
-      const etag = etagDe(contenu);
-      this.#publier(await this.espace.majPage(segs, contenu, stNouveau));
-      json(ctx, 200, { etag, mtime: Math.floor(stNouveau.mtimeMs) }, { ETag: etag });
+      const r = await this.ecrivain.ecrireSousVerrou({ ...demande, revision }, ctx.login);
+      json(ctx, 200, { etag: r.etag, mtime: r.mtime, ...(r.rejoue ? { rejoue: true } : {}) }, { ETag: r.etag });
     });
   }
 
@@ -246,29 +325,11 @@ export class Api {
         const pDir = await lstatOuNull(await resoudre(this.cfg, dossier));
         if (!pMd && !pDir) throw new ErreurHttp(404, "Page parente introuvable.", "parent_introuvable");
       }
-      for (let k = 1; k <= 1000; k++) {
-        const nom = k === 1 ? base : `${base} ${k}`;
-        const segs = [...dossier, nom + ".md"];
-        exigerZoneAutorisee(this.cfg, segs);
-        // « artefacts » ou un dossier masqué à la racine : le dossier homonyme serait une zone interdite -> suffixe
-        if (zoneInterdite(this.cfg, [...dossier, nom])) continue;
-        const md = await verifierEcriture(this.cfg, segs);
-        const dir = await verifierEcriture(this.cfg, [...dossier, nom]);
-        if (md.st || dir.st) continue;
-        await creerDossiers(this.cfg, path.dirname(md.abs));
-        let st: fs.Stats;
-        try {
-          st = await ecrireAtomique(md.abs, contenu, { exclusif: true });
-        } catch (e) {
-          if (e instanceof ErreurHttp && e.raison === "existe") continue;
-          throw e;
-        }
-        const etag = etagDe(contenu);
-        this.#publier(await this.espace.majPage(segs, contenu, st));
-        json(ctx, 201, { chemin: segs.join("/"), etag }, { ETag: etag });
-        return;
-      }
-      throw new ErreurHttp(409, "Trop de pages portent déjà ce nom.", "conflit_nom");
+      const r = await this.ecrivain.creerUniqueSousVerrou({
+        dossier, base, nommer: (b, k) => `${b} ${k}`, action: "creation", transformer: () => contenu,
+        requete: requeteDe(ctx), operation: { parent, titre: titreBrut, contenu: sha256(contenu) },
+      }, ctx.login);
+      json(ctx, 201, { chemin: r.chemin, etag: r.etag, ...(r.rejoue ? { rejoue: true } : {}) }, { ETag: r.etag });
     });
   }
 
@@ -280,14 +341,14 @@ export class Api {
     const corps = await lireJson(ctx.req);
     const source = cheminPage(this.cfg, corps.chemin);
     if (corps.titre !== undefined) {
-      json(ctx, 200, await this.#renommerTitre(source, chaine(corps.titre, "titre", 500)));
+      json(ctx, 200, await this.#renommerTitre(source, chaine(corps.titre, "titre", 500), ctx.login));
       return;
     }
     const nom = nomDeFichier(chaine(corps.nom, "nom", 500));
     const r = await this.verrou.executer(async () => {
       const rejeu = await this.#rejeu(source, { nom });
       if (rejeu) return rejeu;
-      const x = await this.#deplacer(source, source.slice(0, -1), nom);
+      const x = await this.#deplacer(source, source.slice(0, -1), nom, ctx.login, "renommer", mouvementDe(ctx));
       if (x.chemin !== source.join("/")) this.#noterRenommage(source.join("/"), x.chemin, { nom });
       return x;
     });
@@ -327,7 +388,7 @@ export class Api {
    * Renommer = changer le TITRE (une seule notion pour l'utilisateur) : `title:` s'il existe, sinon la ligne `# …` si elle
    * existe ; le fichier est renommé aussi quand son nom suivait le titre (shared/navigation.ts : nomSuitLeTitre).
    */
-  async #renommerTitre(source: string[], brut: string): Promise<{ chemin: string; liensMisAJour: number; etag: string | null; renomme: boolean }> {
+  async #renommerTitre(source: string[], brut: string, principal: string): Promise<{ chemin: string; liensMisAJour: number; etag: string | null; renomme: boolean }> {
     const titre = brut.replace(/\s*[\r\n]+\s*/g, " ").trim();
     if (!titre) throw new ErreurHttp(400, "Titre vide.", "titre_vide");
     return this.verrou.executer(async () => {
@@ -343,6 +404,10 @@ export class Api {
       if (md.st) {
         contenu = (await lireConfine(this.cfg, md.abs, MAX_LECTURE)).contenu;
         etag = etagDe(contenu);
+        // lot 6 : le titre d'une page verrouillée ne change pas (même quand seul le nom du fichier le porte)
+        if (contenuVerrouille(contenu)) {
+          throw new ErreurHttp(423, "Page verrouillée contre les fausses manipulations : déverrouille-la d'abord (les agents peuvent toujours écrire le fichier).", "page_verrouillee", { raison: "page_verrouillee", etag });
+        }
       }
       const { titre: ancien, source: origine } = titreDe(chemin, contenu);
       const suit = nomSuitLeTitre(chemin, contenu);
@@ -353,11 +418,9 @@ export class Api {
           ? poserChamp(d.frontmatter, "title", titre) + contenu.slice(d.frontmatter.length)
           : d.frontmatter + remplacerTexteH1(d.blocTitre, titre) + d.corps;
         if (nouveau !== contenu) {
-          if (Buffer.byteLength(nouveau) > MAX_PAGE) throw new ErreurHttp(413, "Page trop volumineuse (maximum 2 Mo).", "trop_gros");
-          const st2 = await ecrireAtomique(md.abs, nouveau);
+          const r = await this.ecrivain.ecrireSousVerrou({ chemin: source, revision: etag, action: "titre", transformer: () => nouveau }, principal);
           contenu = nouveau;
-          etag = etagDe(nouveau);
-          this.#publier(await this.espace.majPage(source, nouveau, st2));
+          etag = r.etag;
         }
       }
       if (!suit) return { chemin, liensMisAJour: 0, etag, renomme: false };
@@ -370,7 +433,7 @@ export class Api {
       const dDir = await verifierEcriture(this.cfg, cibleDir);
       // nom déjà pris : seul le titre change (pas d'erreur, pas de suffixe surprenant)
       if (dMd.st || dDir.st) return { chemin, liensMisAJour: 0, etag, renomme: false };
-      const r = await this.#deplacer(source, source.slice(0, -1), nom);
+      const r = await this.#deplacer(source, source.slice(0, -1), nom, principal, "renommer");
       if (r.chemin !== chemin) this.#noterRenommage(chemin, r.chemin, { titre });
       return { chemin: r.chemin, liensMisAJour: r.liensMisAJour, etag, renomme: r.chemin !== chemin };
     });
@@ -396,13 +459,19 @@ export class Api {
         const pDir = await lstatOuNull(await resoudre(this.cfg, dest));
         if (!pMd && !pDir) throw new ErreurHttp(404, "Page parente introuvable.", "parent_introuvable");
       }
-      return this.#deplacer(source, dest, feuille(source.join("/")));
+      return this.#deplacer(source, dest, feuille(source.join("/")), ctx.login, "deplacer", mouvementDe(ctx));
     });
     json(ctx, 200, r);
   }
 
-  /** Déplace / renomme X.md et X/ vers <destDossier>/<nom>.md et <destDossier>/<nom>/, puis met à jour les liens. */
-  async #deplacer(source: string[], destDossier: string[], nom: string): Promise<{ chemin: string; liensMisAJour: number }> {
+  /**
+   * Déplace / renomme X.md et X/ vers <destDossier>/<nom>.md et <destDossier>/<nom>/, puis met à jour les liens.
+   * Par la porte d'écriture : révision de la source (facultative), intention, journal, destination exclusive.
+   */
+  async #deplacer(
+    source: string[], destDossier: string[], nom: string, principal: string, action: "renommer" | "deplacer",
+    m: { revision?: string; requete?: string } = {},
+  ): Promise<{ chemin: string; liensMisAJour: number }> {
     const ancienNom = source.join("/").slice(0, -3);
     const cible = [...destDossier, nom + ".md"];
     const cibleDir = [...destDossier, nom];
@@ -410,6 +479,17 @@ export class Api {
     exigerZoneAutorisee(this.cfg, cibleDir);
     const nouveauNom = cibleDir.join("/");
     if (nouveauNom === ancienNom) return { chemin: source.join("/"), liensMisAJour: 0 };
+    return this.ecrivain.mouvementSousVerrou(
+      { action, chemin: source, vers: cible.join("/"), ...m, operation: { vers: cible.join("/") } }, principal,
+      async () => ({ resultat: await this.#deplacerFait(source, destDossier, nom, principal), vers: cible.join("/") }),
+    );
+  }
+
+  async #deplacerFait(source: string[], destDossier: string[], nom: string, principal: string): Promise<{ chemin: string; liensMisAJour: number }> {
+    const ancienNom = source.join("/").slice(0, -3);
+    const cible = [...destDossier, nom + ".md"];
+    const cibleDir = [...destDossier, nom];
+    const nouveauNom = cibleDir.join("/");
     const srcMd = await verifierEcriture(this.cfg, source);
     const srcDir = await verifierEcriture(this.cfg, dossierDePage(source));
     const aMd = !!srcMd.st;
@@ -458,7 +538,7 @@ export class Api {
         const lu = await lireConfine(this.cfg, v.abs, MAX_LECTURE);
         const r = reecrireLiens(lu.contenu, avant, apres, dep);
         if (r.n === 0 || r.contenu === lu.contenu) continue;
-        await ecrireAtomique(v.abs, r.contenu);
+        await this.ecrivain.ecrireSousVerrou({ chemin: segsN, revision: etagDe(lu.contenu), action: "liens", transformer: () => r.contenu }, principal);
         n += r.n;
         touchees.push(nouveauChemin);
       } catch (e) {
@@ -488,49 +568,63 @@ export class Api {
     const segs = cheminPage(this.cfg, corps.chemin);
     const chemin = segs.join("/");
     const r = await this.verrou.executer(async () => {
+      // rejeu d'abord (la page n'existe plus après une suppression réussie)
+      const m = mouvementDe(ctx);
+      const rejeu = await this.ecrivain.rejeuSousVerrou({ chemin: segs, action: "supprimer", requete: m.requete }, ctx.login);
+      if (rejeu) return rejeu as unknown as { id: string; corbeille: string; chemin: string; titre: string };
       const md = await verifierEcriture(this.cfg, segs);
       const dir = await verifierEcriture(this.cfg, dossierDePage(segs));
       const aMd = !!(md.st && md.st.isFile());
       const aDir = !!(dir.st && dir.st.isDirectory());
       if (!aMd && !aDir) throw new ErreurHttp(404, "Page introuvable.", "introuvable");
-      const racine = await assurerCorbeille(this.cfg);
-      const page = this.espace.pages.get(chemin);
-      const titre = page?.titre ?? feuille(chemin);
-      const icone = page?.icone ?? null;
-      const sousPages = aDir ? await compterPages(dir.abs) : 0;
-      for (let k = 0; k < 20; k++) {
-        const id = nouvelId();
-        const element = path.join(racine, id);
-        try {
-          await fsp.mkdir(element, { mode: 0o755 });
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code === "EEXIST") continue;
-          throw e;
-        }
-        const destMd = path.join(element, ...segs);
-        const destDir = path.join(element, ...dossierDePage(segs));
-        const faits: [string, string][] = [];
-        try {
-          await creerDossiers(this.cfg, path.dirname(destMd));
-          if (aMd) { await fsp.rename(md.abs, destMd); faits.push([md.abs, destMd]); }
-          if (aDir) { await fsp.rename(dir.abs, destDir); faits.push([dir.abs, destDir]); }
-        } catch (e) {
-          for (const [a, b] of faits.reverse()) await fsp.rename(b, a).catch(() => {});
-          await fsp.rm(element, { recursive: true, force: true }).catch(() => {});
-          throw e;
-        }
-        await fsyncDossier(path.dirname(md.abs));
-        const meta: MetaCorbeille = { version: 1, chemin, titre, icone, date: new Date().toISOString(), sousPages, login: ctx.login };
-        await ecrireAtomique(path.join(element, FICHIER_META), JSON.stringify(meta, null, 1) + "\n", { exclusif: true })
-          .catch((e) => journal({ niveau: "avertissement", quoi: "corbeille_meta", erreur: String((e as Error).message) }));
-        const nomPage = chemin.slice(0, -3);
-        this.#publier(await this.espace.traiter([chemin, nomPage]));
-        await this.#majFavoris((c) => (c === chemin || c === nomPage || c.startsWith(nomPage + "/") ? null : c));
-        return { id, corbeille: [".corbeille", id, ...(aMd ? segs : dossierDePage(segs))].join("/"), chemin, titre };
-      }
-      throw new ErreurHttp(409, "Corbeille encombrée, réessaie.", "corbeille");
+      return this.ecrivain.mouvementSousVerrou({ action: "supprimer", chemin: segs, vers: null, ...m }, ctx.login, async () => {
+        const x = await this.#supprimerFait(ctx, segs, md, dir, aMd, aDir);
+        return { resultat: x, vers: x.corbeille };
+      });
     });
     json(ctx, 200, r);
+  }
+
+  async #supprimerFait(
+    ctx: Ctx, segs: string[], md: { abs: string }, dir: { abs: string }, aMd: boolean, aDir: boolean,
+  ): Promise<{ id: string; corbeille: string; chemin: string; titre: string }> {
+    const chemin = segs.join("/");
+    const racine = await assurerCorbeille(this.cfg);
+    const page = this.espace.pages.get(chemin);
+    const titre = page?.titre ?? feuille(chemin);
+    const icone = page?.icone ?? null;
+    const sousPages = aDir ? await compterPages(dir.abs) : 0;
+    for (let k = 0; k < 20; k++) {
+      const id = nouvelId();
+      const element = path.join(racine, id);
+      try {
+        await fsp.mkdir(element, { mode: 0o755 });
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "EEXIST") continue;
+        throw e;
+      }
+      const destMd = path.join(element, ...segs);
+      const destDir = path.join(element, ...dossierDePage(segs));
+      const faits: [string, string][] = [];
+      try {
+        await creerDossiers(this.cfg, path.dirname(destMd));
+        if (aMd) { await fsp.rename(md.abs, destMd); faits.push([md.abs, destMd]); }
+        if (aDir) { await fsp.rename(dir.abs, destDir); faits.push([dir.abs, destDir]); }
+      } catch (e) {
+        for (const [a, b] of faits.reverse()) await fsp.rename(b, a).catch(() => {});
+        await fsp.rm(element, { recursive: true, force: true }).catch(() => {});
+        throw e;
+      }
+      await fsyncDossier(path.dirname(md.abs));
+      const meta: MetaCorbeille = { version: 1, chemin, titre, icone, date: new Date().toISOString(), sousPages, login: ctx.login };
+      await ecrireAtomique(path.join(element, FICHIER_META), JSON.stringify(meta, null, 1) + "\n", { exclusif: true })
+        .catch((e) => journal({ niveau: "avertissement", quoi: "corbeille_meta", erreur: String((e as Error).message) }));
+      const nomPage = chemin.slice(0, -3);
+      this.#publier(await this.espace.traiter([chemin, nomPage]));
+      await this.#majFavoris((c) => (c === chemin || c === nomPage || c.startsWith(nomPage + "/") ? null : c));
+      return { id, corbeille: [".corbeille", id, ...(aMd ? segs : dossierDePage(segs))].join("/"), chemin, titre };
+    }
+    throw new ErreurHttp(409, "Corbeille encombrée, réessaie.", "corbeille");
   }
 
   // -------------------------------------------------------------------------------------------
@@ -552,6 +646,15 @@ export class Api {
   async restaurerCorbeille(ctx: Ctx): Promise<void> {
     const corps = await lireJson(ctx.req);
     const r = await this.verrou.executer(async () => {
+      // Lot 5 : par la porte d'écriture (mouvement « restaurer » : idempotence, intention durable, journal).
+      // Source = l'élément de corbeille `.corbeille/<id>` (dossier), destination = le chemin d'origine (ou « (restaurée) »).
+      const requete = requeteDe(ctx);
+      const idEl = typeof corps.id === "string" ? corps.id : "";
+      const mvt = { action: "restaurer" as const, chemin: [".corbeille", idEl], requete, operation: { id: idEl } };
+      if (requete !== undefined && idEl) {
+        const rejeu = await this.ecrivain.rejeuSousVerrou(mvt, ctx.login);
+        if (rejeu) return rejeu as unknown as { chemin: string; renomme: boolean };
+      }
       const abs = await cheminElement(this.cfg, corps.id);
       const el = await decrireElement(this.cfg, corps.id as string, abs);
       if (!el.segs) throw el.erreur ?? new ErreurHttp(404, "Contenu de l'élément introuvable.", "element_vide");
@@ -566,6 +669,7 @@ export class Api {
       if (!stMd && !stDir) throw new ErreurHttp(404, "Contenu de l'élément introuvable.", "element_vide");
       const dossier = segs.slice(0, -1);
       const base = feuille(segs.join("/"));
+      return this.ecrivain.mouvementSousVerrou({ ...mvt, vers: segs.join("/") }, ctx.login, async () => {
       for (let k = 0; k < 100; k++) {
         const nom = k === 0 ? base : k === 1 ? `${base} (restaurée)` : `${base} (restaurée ${k})`;
         const cible = [...dossier, nom + ".md"];
@@ -595,9 +699,10 @@ export class Api {
         await fsyncDossier(path.dirname(dMd.abs));
         await effacerElement(abs).catch((e) => journal({ niveau: "avertissement", quoi: "corbeille", erreur: String((e as Error).message) }));
         this.#publier(await this.espace.traiter([cible.join("/"), cibleDir.join("/")]));
-        return { chemin: cible.join("/"), renomme: k > 0 };
+        return { resultat: { chemin: cible.join("/"), renomme: k > 0 }, vers: cible.join("/") };
       }
       throw new ErreurHttp(409, "Impossible de trouver un nom libre pour restaurer.", "conflit_nom");
+      });
     });
     json(ctx, 200, r);
   }
@@ -719,7 +824,7 @@ export class Api {
       if (!estPage) {
         if (!this.espace.fichiers.has(sourceChemin)) throw new ErreurHttp(404, "Fichier introuvable.", "introuvable");
       } else if (dossierDe(sourceChemin) !== dest) {
-        const x = await this.#deplacer(source, destDossier, nomSource);
+        const x = await this.#deplacer(source, destDossier, nomSource, ctx.login, "deplacer", mouvementDe(ctx));
         chemin = x.chemin;
         liensMisAJour = x.liensMisAJour;
       } else if (!this.#existe(sourceChemin)) {
@@ -794,13 +899,10 @@ export class Api {
         const dMd = await verifierEcriture(this.cfg, cible);
         const dDir = await verifierEcriture(this.cfg, cibleDir);
         if (dMd.st || dDir.st) continue;
-        let mdCree = false;
         let dirCree = false;
         try {
-          if (aMd) {
-            await ecrireAtomique(dMd.abs, titreDeCopie(chemin, contenu, suffixe), { exclusif: true, mode: md.st!.mode & 0o777 });
-            mdCree = true;
-          }
+          // Lot 5 : sous-pages copiées d'abord, puis la page elle-même PAR LA PORTE (création exclusive, intention
+          // durable, journal « dupliquer ») : l'écriture journalisée est la dernière, rien à défaire après elle.
           if (aDir) {
             await fsp.mkdir(dDir.abs, { mode: 0o755 });
             dirCree = true;
@@ -811,8 +913,12 @@ export class Api {
               await fsp.copyFile(path.join(dir.abs, f), path.join(dDir.abs, f), fs.constants.COPYFILE_EXCL);
             }
           }
+          if (aMd) {
+            await this.ecrivain.ecrireSousVerrou({
+              chemin: cible, revision: null, action: "dupliquer", transformer: () => titreDeCopie(chemin, contenu, suffixe), operation: { source: chemin },
+            }, ctx.login);
+          }
         } catch (e) {
-          if (mdCree) await fsp.unlink(dMd.abs).catch(() => {});
           if (dirCree) await fsp.rm(dDir.abs, { recursive: true, force: true }).catch(() => {});
           if (e instanceof ErreurHttp && e.raison === "existe") continue;
           if ((e as NodeJS.ErrnoException).code === "EEXIST" && !dirCree) continue;
@@ -834,6 +940,10 @@ export class Api {
   // Historique des versions (git en lecture seule + instantanés)
   // -------------------------------------------------------------------------------------------
 
+  /**
+   * Version automatique de séance (lot 4 « Corrections ») : appelée sous le verrou, juste avant qu'une écriture de
+   * Carnet remplace une page EXISTANTE (PUT /api/page, /api/tache, /api/meta). Voir Instantanes.seance.
+   */
   async historique(ctx: Ctx): Promise<void> {
     const segs = cheminPage(this.cfg, ctx.url.searchParams.get("chemin"));
     const chemin = segs.join("/");
@@ -841,10 +951,10 @@ export class Api {
     const instantanes = await this.instantanes.lister(segs);
     const versions: Array<Record<string, unknown> & { date: number }> = [
       ...commits.map((c) => ({ id: `git:${c.hash}`, date: c.date, source: "git", auteur: c.auteur, message: c.message })),
-      ...instantanes.map((i) => ({ id: i.id, date: i.date, source: "instantane", auto: i.auto })),
+      ...instantanes.map((i) => ({ id: i.id, date: i.date, source: "instantane", auto: i.auto, genre: i.genre, ...(i.ecrasee ? { ecrasee: true } : {}) })),
     ];
     versions.sort((a, b) => b.date - a.date);
-    json(ctx, 200, { git: this.git.actif, versions });
+    json(ctx, 200, { git: this.git.actif, versions, pauseVersions: this.cfg.pauseVersions });
   }
 
   /** Contenu d'une version : `git:<hash>` (commit de l'historique de CETTE page, chemin dans l'espace) ou `inst:<stamp>`. */
@@ -911,14 +1021,14 @@ export class Api {
         }
         const inst = await this.instantanes.creer(segs, a.contenu, true);
         if (a.contenu === v.contenu) return { etag: a.etag, instantane: inst.id };
-        const st2 = await ecrireAtomique(abs, v.contenu);
-        this.#publier(await this.espace.majPage(segs, v.contenu, st2));
-        return { etag: etagDe(v.contenu), instantane: inst.id };
+        // Lot 5 : une ancienne attestation de décision ne redevient jamais valide par une restauration (barrière).
+        const attester = await barriereRestauration(this.cfg, this.ecrivain, v.contenu, "restauration");
+        const r = await this.ecrivain.ecrireSousVerrou({ chemin: segs, revision: a.etag, action: "restauration", transformer: () => v.contenu, ...(attester ? { attester } : {}) }, ctx.login);
+        return { etag: r.etag, instantane: inst.id };
       }
-      await creerDossiers(this.cfg, path.dirname(abs));
-      const st2 = await ecrireAtomique(abs, v.contenu, { exclusif: true });
-      this.#publier(await this.espace.majPage(segs, v.contenu, st2));
-      return { etag: etagDe(v.contenu), instantane: null };
+      const attester = await barriereRestauration(this.cfg, this.ecrivain, v.contenu, "restauration");
+      const r = await this.ecrivain.ecrireSousVerrou({ chemin: segs, revision: null, action: "restauration", transformer: () => v.contenu, ...(attester ? { attester } : {}) }, ctx.login);
+      return { etag: r.etag, instantane: null };
     });
     json(ctx, 200, r);
   }
@@ -1006,11 +1116,14 @@ export class Api {
     const q = (ctx.url.searchParams.get("q") ?? "").slice(0, 200);
     const l = Number.parseInt(ctx.url.searchParams.get("limite") ?? "30", 10);
     const limite = Number.isFinite(l) ? Math.min(100, Math.max(1, l)) : 30;
-    json(ctx, 200, { resultats: this.espace.rechercher(q, limite) });
+    // lot 6 : `archives=1` = filtre « Inclure les archives » (sinon les pages archivées ne sortent pas)
+    json(ctx, 200, { resultats: this.espace.rechercher(q, limite, ctx.url.searchParams.get("archives") === "1") });
   }
 
   async accueil(ctx: Ctx): Promise<void> {
-    const pages = this.espace.pagesVisibles().sort((a, b) => b.mtime - a.mtime);
+    // Fichiers des agents (lot 3) : exclus de l'accueil (toujours dans l'arbre et la recherche explicite).
+    // lot 6 : ni pages archivées ni modèles (pagesCourantes)
+    const pages = this.espace.pagesCourantes().filter((p) => !estTechnique(this.cfg.techniques, p.chemin)).sort((a, b) => b.mtime - a.mtime);
     const resume = (p: Page) => ({ chemin: p.chemin, titre: p.titre, icone: p.icone, mtime: p.mtime, resume: this.espace.resume(p) });
     const recents = pages.slice(0, 12).map(resume);
     const aRelire: unknown[] = [];
@@ -1037,9 +1150,9 @@ export class Api {
     let liste: Page[];
     if (dossier !== null) {
       const d = cheminAutorise(this.cfg, dossier.replace(/\.md$/, ""), { vide: true }).join("/");
-      liste = this.espace.pagesVisibles().filter((p) => dossierDe(p.chemin) === d);
+      liste = this.espace.pagesCourantes().filter((p) => dossierDe(p.chemin) === d); // lot 6 : sans archives ni modèles
     } else {
-      liste = this.espace.pagesVisibles().filter((p) => p.tags.some((t) => plier(t) === "projet"));
+      liste = this.espace.pagesCourantes().filter((p) => p.tags.some((t) => plier(t) === "projet"));
     }
     liste.sort((a, b) => {
       if (a.ordre !== null && b.ordre !== null && a.ordre !== b.ordre) return a.ordre - b.ordre;
@@ -1063,80 +1176,116 @@ export class Api {
     json(ctx, 200, { pages });
   }
 
+  /**
+   * Modifier UNE tâche (V2 : cocher/décocher ; V3 : échéance, priorité, date de clôture, via shared/taches.ts).
+   * Corps : {chemin, ligne, texte (ligne attendue, sans \r), coche?, echeance? (AAAA-MM-JJ|null), priorite? (|null),
+   * faite? (AAAA-MM-JJ|null|true = aujourd'hui dans CARNET_FUSEAU)}. 409 `tache_changee` si la ligne a changé.
+   */
   async tache(ctx: Ctx): Promise<void> {
     const corps = await lireJson(ctx.req);
     const segs = cheminPage(this.cfg, corps.chemin);
     const ligne = corps.ligne;
     if (typeof ligne !== "number" || !Number.isInteger(ligne) || ligne < 0) throw new ErreurHttp(400, "Champ « ligne » invalide.", "champ_invalide");
     const texteAttendu = chaine(corps.texte, "texte", 100_000);
-    if (typeof corps.coche !== "boolean") throw new ErreurHttp(400, "Champ « coche » invalide.", "champ_invalide");
-    const coche = corps.coche;
-    await this.verrou.executer(async () => {
-      const { abs, st } = await verifierEcriture(this.cfg, segs);
-      if (!st || !st.isFile()) throw new ErreurHttp(404, "Page introuvable.", "introuvable");
-      const { contenu } = await lireConfine(this.cfg, abs, MAX_LECTURE);
-      const lignes = contenu.split("\n");
-      const conflit = () => new ErreurHttp(409, "La tâche a changé entre-temps : recharge la page.", "tache_changee");
-      if (ligne >= lignes.length) throw conflit();
-      const brute = lignes[ligne];
-      const cr = brute.endsWith("\r");
-      const l = cr ? brute.slice(0, -1) : brute;
-      if (l !== texteAttendu || marquerCode(lignes)[ligne]) throw conflit();
-      const m = RE_TACHE.exec(l);
-      if (!m) throw conflit();
-      const nouvelle = m[1] + (coche ? "[x]" : "[ ]") + l.slice(m[1].length + 3);
-      if (nouvelle === l) {
-        json(ctx, 200, { etag: etagDe(contenu), texte: l });
-        return;
-      }
-      lignes[ligne] = nouvelle + (cr ? "\r" : "");
-      const nouveau = lignes.join("\n");
-      const st2 = await ecrireAtomique(abs, nouveau);
-      this.#publier(await this.espace.majPage(segs, nouveau, st2));
-      json(ctx, 200, { etag: etagDe(nouveau), texte: nouvelle });
-    });
+    const changements: Partial<ChangementsTache> = {};
+    const invalide = (nom: string) => new ErreurHttp(400, `Champ « ${nom} » invalide.`, "champ_invalide");
+    if (corps.coche !== undefined) {
+      if (typeof corps.coche !== "boolean") throw invalide("coche");
+      changements.coche = corps.coche;
+    }
+    if (corps.echeance !== undefined) {
+      if (corps.echeance !== null && typeof corps.echeance !== "string") throw invalide("echeance");
+      changements.echeance = corps.echeance as string | null;
+    }
+    if (corps.priorite !== undefined) {
+      if (corps.priorite !== null && !["plus-haute", "haute", "moyenne", "basse", "plus-basse"].includes(corps.priorite as string)) throw invalide("priorite");
+      changements.priorite = corps.priorite as Priorite | null;
+    }
+    if (corps.faite !== undefined) {
+      if (corps.faite === true) changements.faite = dateDuJour(this.cfg.fuseau);
+      else if (corps.faite === null || typeof corps.faite === "string") changements.faite = corps.faite as string | null;
+      else throw invalide("faite");
+    }
+    if (!Object.keys(changements).length) throw invalide("coche");
+    const ifMatch = ctx.req.headers["if-match"];
+    let texteFinal = texteAttendu;
+    const r = await this.ecrivain.ecrire({
+      chemin: segs, revision: ifMatch !== undefined && ifMatch.trim() !== "*" ? normEtag(ifMatch.split(",")[0]) : REVISION_EXISTANTE,
+      action: "tache", requete: requeteDe(ctx), operation: { ligne, texte: texteAttendu, changements },
+      transformer: (avant) => {
+        const lignes = (avant ?? "").split("\n");
+        const conflit = () => new ErreurHttp(409, "La tâche a changé entre-temps : recharge la page.", "tache_changee");
+        if (ligne >= lignes.length) throw conflit();
+        const brute = lignes[ligne];
+        const cr = brute.endsWith("\r") ? "\r" : "";
+        const l = cr ? brute.slice(0, -1) : brute;
+        if (l !== texteAttendu || marquerCode(lignes)[ligne] || !analyserTache(l)) throw conflit();
+        texteFinal = modifierTache(l, changements);
+        lignes[ligne] = texteFinal + cr;
+        return lignes.join("\n");
+      },
+    }, ctx.login);
+    json(ctx, 200, { etag: r.etag, texte: r.rejoue ? null : texteFinal, ...(r.rejoue ? { rejoue: true } : {}) });
   }
 
+  /**
+   * Propriétés (frontmatter), une ou plusieurs, chacune modifiée seule (shared/proprietes.ts : reste conservé à l'octet).
+   * - `champs` (V2) : {cle: texte | nombre | booléen (écrits en texte) | null = RETIRER la clé} ;
+   * - `proprietes` (V3) : {cle: texte | nombre | booléen | null (écrit `null`) | liste de textes}, `retirer: [cles]`,
+   *   `types: {cle: "texte"|"nombre"|"case"|"date"|"liste"|"selection"}` (guide l'écriture, valide la valeur).
+   * YAML actuel invalide ou syntaxe refusée (ancres, étiquettes, clés en double…) : 422 explicite, rien n'est écrit.
+   */
   async meta(ctx: Ctx): Promise<void> {
     const corps = await lireJson(ctx.req);
     const segs = cheminPage(this.cfg, corps.chemin);
-    const champs = corps.champs;
-    if (!champs || typeof champs !== "object" || Array.isArray(champs)) throw new ErreurHttp(400, "Champ « champs » invalide.", "champ_invalide");
-    const entrees = Object.entries(champs as Record<string, unknown>);
-    if (!entrees.length || entrees.length > 50) throw new ErreurHttp(400, "Entre 1 et 50 champs.", "champ_invalide");
-    const valeurs: [string, string | null][] = entrees.map(([k, v]) => {
-      if (!RE_CLE_META.test(k)) throw new ErreurHttp(400, `Clé invalide : ${k.slice(0, 64)}`, "cle_invalide");
-      if (v === null) return [k, null];
-      if (typeof v === "number" || typeof v === "boolean") return [k, String(v)];
-      if (typeof v !== "string" || v.length > 10_000) throw new ErreurHttp(400, `Valeur invalide pour ${k}.`, "valeur_invalide");
-      return [k, v];
-    });
+    const operations: { cle: string; valeur: ValeurPropriete | undefined; type?: TypePropriete }[] = [];
+    if (corps.champs !== undefined) {
+      const champs = corps.champs;
+      if (!champs || typeof champs !== "object" || Array.isArray(champs)) throw new ErreurHttp(400, "Champ « champs » invalide.", "champ_invalide");
+      const entrees = Object.entries(champs as Record<string, unknown>);
+      if (!entrees.length || entrees.length > 50) throw new ErreurHttp(400, "Entre 1 et 50 champs.", "champ_invalide");
+      for (const [k, v] of entrees) {
+        if (!RE_CLE_META.test(k)) throw new ErreurHttp(400, `Clé invalide : ${k.slice(0, 64)}`, "cle_invalide");
+        if (v === null) operations.push({ cle: k, valeur: undefined });
+        else if (typeof v === "number" || typeof v === "boolean") operations.push({ cle: k, valeur: String(v) });
+        else if (typeof v !== "string" || v.length > 10_000) throw new ErreurHttp(400, `Valeur invalide pour ${k}.`, "valeur_invalide");
+        else operations.push({ cle: k, valeur: v });
+      }
+    }
+    if (corps.proprietes !== undefined || corps.retirer !== undefined) {
+      const p = corps.proprietes ?? {};
+      const types = corps.types ?? {};
+      if (!p || typeof p !== "object" || Array.isArray(p)) throw new ErreurHttp(400, "Champ « proprietes » invalide.", "champ_invalide");
+      if (!types || typeof types !== "object" || Array.isArray(types)) throw new ErreurHttp(400, "Champ « types » invalide.", "champ_invalide");
+      const retirer = corps.retirer ?? [];
+      if (!Array.isArray(retirer) || retirer.some((k) => typeof k !== "string")) throw new ErreurHttp(400, "Champ « retirer » invalide.", "champ_invalide");
+      for (const [k, v] of Object.entries(p as Record<string, unknown>)) {
+        const type = (types as Record<string, unknown>)[k];
+        if (type !== undefined && !["texte", "nombre", "case", "date", "liste", "selection"].includes(type as string)) throw new ErreurHttp(400, `Type invalide pour ${k.slice(0, 64)}.`, "champ_invalide");
+        operations.push({ cle: k, valeur: v as ValeurPropriete, ...(type ? { type: type as TypePropriete } : {}) });
+      }
+      for (const k of retirer as string[]) operations.push({ cle: k, valeur: undefined });
+    }
+    if (!operations.length || operations.length > 50) throw new ErreurHttp(400, "Entre 1 et 50 champs.", "champ_invalide");
     const ifMatch = ctx.req.headers["if-match"];
-    await this.verrou.executer(async () => {
-      const { abs, st } = await verifierEcriture(this.cfg, segs);
-      if (!st || !st.isFile()) throw new ErreurHttp(404, "Page introuvable.", "introuvable");
-      const { contenu } = await lireConfine(this.cfg, abs, MAX_LECTURE);
-      const etagActuel = etagDe(contenu);
-      if (ifMatch !== undefined && ifMatch.trim() !== "*" && !ifMatch.split(",").some((v) => normEtag(v) === etagActuel)) {
-        throw new ErreurHttp(412, "La page a été modifiée ailleurs.", "etag_discordant", { etag: etagActuel, contenu });
-      }
-      const d = decouper(contenu);
-      let fm = d.frontmatter;
-      for (const [k, v] of valeurs) fm = poserChamp(fm, k, v);
-      const nouveau = fm + contenu.slice(d.frontmatter.length);
-      if (nouveau === contenu) {
-        json(ctx, 200, { etag: etagActuel });
-        return;
-      }
-      const yamlAvant = d.yaml.trim() === "" || lireFrontmatter(d.yaml) !== null;
-      const yamlApres = decouper(nouveau).yaml;
-      if (yamlAvant && yamlApres.trim() !== "" && lireFrontmatter(yamlApres) === null) {
-        throw new ErreurHttp(422, "Modification refusée : elle rendrait l'en-tête YAML invalide.", "yaml_invalide");
-      }
-      const st2 = await ecrireAtomique(abs, nouveau);
-      this.#publier(await this.espace.majPage(segs, nouveau, st2));
-      json(ctx, 200, { etag: etagDe(nouveau) });
-    });
+    const r = await this.ecrivain.ecrire({
+      chemin: segs, revision: ifMatch !== undefined && ifMatch.trim() !== "*" ? normEtag(ifMatch.split(",")[0]) : REVISION_EXISTANTE,
+      action: "meta", requete: requeteDe(ctx), operation: operations,
+      transformer: (avant) => {
+        let c = avant ?? "";
+        for (const o of operations) c = poserPropriete(c, o.cle, o.valeur, o.type ? { type: o.type } : {});
+        return c;
+      },
+    }, ctx.login);
+    json(ctx, 200, { etag: r.etag, ...(r.rejoue ? { rejoue: true } : {}) });
+  }
+
+  /** Attestations d'une page (lecture pour les agents) : chacune avec `valide` (signature vérifiée par le serveur). */
+  async listerAttestations(ctx: Ctx): Promise<void> {
+    const segs = cheminPage(this.cfg, ctx.url.searchParams.get("chemin"));
+    const demande = ctx.url.searchParams.get("demande");
+    const l = await this.ecrivain.attestations.lister({ chemin: segs.join("/"), ...(demande ? { demande } : {}) });
+    json(ctx, 200, { chemin: segs.join("/"), attestations: l.map((x) => ({ ...x.attestation, valide: x.valide })) });
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1290,6 +1439,172 @@ export class Api {
   async artefacts(ctx: Ctx): Promise<void> {
     json(ctx, 200, { artefacts: await listerArtefacts(this.cfg) });
   }
+  // -------------------------------------------------------------------------------------------
+  // V3 lot 2 « Bases » (lecture ; les écritures passent par l'Ecrivain)
+  // -------------------------------------------------------------------------------------------
+
+  /** GET /api/base?chemin=<page>&bloc=<n>&vue=<i> : le bloc ```base n° n de la page, tel qu'il est sur le disque. */
+  async lireBase(ctx: Ctx): Promise<void> {
+    const segs = cheminPage(this.cfg, ctx.url.searchParams.get("chemin"));
+    const bloc = lireVue(ctx.url.searchParams.get("bloc"));
+    const vue = lireVue(ctx.url.searchParams.get("vue"));
+    const { blocs } = await this.bases.blocsDePage(segs);
+    const b = blocs[bloc];
+    if (!b) throw new ErreurHttp(404, `Pas de bloc base n° ${bloc} dans cette page.`, "bloc_introuvable", { blocs: blocs.length });
+    if (b.ligneFin === -1) throw erreurBase([{ ou: "bloc", message: "Bloc base non fermé (``` manquant)." }]);
+    json(ctx, 200, { chemin: segs.join("/"), bloc, source: b.source, ...this.bases.evaluerSource(b.source, vue) });
+  }
+
+  /** POST /api/base/evaluer { chemin, source, vue } : évalue le YAML affiché par l'éditeur (rien n'est écrit). */
+  async evaluerBase(ctx: Ctx): Promise<void> {
+    const corps = await lireJson(ctx.req, 128 * 1024);
+    cheminPage(this.cfg, corps.chemin);
+    json(ctx, 200, this.bases.evaluerSource(lireSource(corps.source), lireVue(corps.vue)));
+  }
+
+  /** POST /api/base/reecrire { source, vue, changement } : nouveau YAML du bloc (filtres, tri, vues : K14-01) ou 422 si non conservable. */
+  async reecrireBase(ctx: Ctx): Promise<void> {
+    const corps = await lireJson(ctx.req, 128 * 1024);
+    const source = lireSource(corps.source);
+    const vue = lireVue(corps.vue);
+    const { def, erreurs } = lireDefinition(source);
+    if (!def) throw erreurBase(erreurs);
+    const ch = lireChangement(corps.changement);
+    // K14-01 : `avant` / `apres` = filtres et tri de la vue avant et après (l'interface retient l'état d'origine pour
+    // « Enregistrer comme nouvelle vue… ») ; `vue` = vue à montrer ensuite (nouvelle, ou voisine d'une vue supprimée).
+    const avant = etatVue(source, vue);
+    // Échéances (11/10/2026) : « Afficher dans Aujourd'hui » ; la déclaration est relue (sinon 422 avec la raison)
+    // et la réponse porte l'aperçu (fiches concernées) calculé sur le bloc réécrit. Rien n'est écrit sur le disque.
+    if (ch.aujourdhui !== undefined) {
+      const nouveau = poserAujourdhui(source, ch.aujourdhui);
+      const lu = lireDefinition(nouveau);
+      if (!lu.def) throw erreurBase(lu.erreurs);
+      if (ch.aujourdhui && !lu.def.aujourdhui) {
+        const raison = lu.def.avertissements.find((a) => a.startsWith("carnet.aujourdhui")) ?? "déclaration refusée.";
+        throw new ErreurHttp(422, raison, "reecriture_refusee", { raison: "reecriture_refusee" });
+      }
+      const chemin = typeof corps.chemin === "string" ? cheminPage(this.cfg, corps.chemin).join("/") : null;
+      const apercu = lu.def.aujourdhui && chemin ? this.bases.apercuAujourdhui(chemin, lu.def) : null;
+      json(ctx, 200, { source: nouveau, vue, inchange: nouveau === source, avant, apres: etatVue(nouveau, vue), ...(apercu ? { apercu } : {}) });
+      return;
+    }
+    const res = estChangementDeVues(ch) ? changerVues(source, vue, ch) : { source: reecrireVue(source, vue, ch), vue };
+    json(ctx, 200, { ...res, inchange: res.source === source, avant, apres: etatVue(res.source, res.vue) });
+  }
+
+  /** POST /api/base/dossier { page, nom } : crée le dossier d'une nouvelle base sous la page (nom unique). */
+  /**
+   * K10-01 · GET /api/bases/destinations : « Ajouter à <base> » au rangement (Boîte, « Déplacer vers… »). Lecture
+   * seule ; le rangement lui-même passe par POST /api/deplacer avec `parent` (porte d'écriture, journal, idempotence).
+   */
+  async destinationsBases(ctx: Ctx): Promise<void> {
+    json(ctx, 200, { destinations: await this.bases.destinations() });
+  }
+
+  async dossierBase(ctx: Ctx): Promise<void> {
+    const corps = await lireJson(ctx.req);
+    const nom = chaine(corps.nom, "nom", 120).replace(/\s+/g, " ").trim();
+    if (!nom) throw new ErreurHttp(400, "Nom vide.", "nom_vide");
+    const r = await this.verrou.executer(() => this.bases.creerDossier(chaine(corps.page, "page", 1024), nom));
+    json(ctx, 201, r);
+  }
+
+  /**
+   * POST /api/propriete { chemin, cle, valeur | retirer: true, type?, options? } + If-Match (révision affichée) +
+   * X-Carnet-Requete : pose UNE propriété (cellule d'une base, panneau « Propriétés ») par l'Ecrivain. Le type vient
+   * de la requête (colonne de la base affichée) ou, à défaut, de la base dont la page est une entrée. Saisie hors type
+   * ou hors liste : 422 ; fichier changé depuis l'affichage : 412 + version actuelle (rien n'est écrasé).
+   */
+  async ecrirePropriete(ctx: Ctx): Promise<void> {
+    const corps = await lireJson(ctx.req, 64 * 1024);
+    const segs = cheminPage(this.cfg, corps.chemin);
+    const cle = chaine(corps.cle, "cle", 64);
+    const retirer = corps.retirer === true;
+    if (CLES_PROVENANCE.has(cle)) {
+      throw new ErreurHttp(422, `« ${cle} » est une propriété de provenance : Carnet l'affiche sans jamais la réécrire.`, "provenance", { raison: "provenance" });
+    }
+    if (!retirer && !Object.hasOwn(corps, "valeur")) throw new ErreurHttp(400, "Champ « valeur » (ou « retirer ») manquant.", "champ_invalide");
+    const ifMatch = ctx.req.headers["if-match"];
+    if (ifMatch === undefined || ifMatch.trim() === "" || ifMatch.trim() === "*") {
+      throw new ErreurHttp(428, "En-tête If-Match obligatoire : la révision affichée de la page.", "if_match_absent");
+    }
+    let decl: DeclarationPropriete | null = null;
+    if (corps.type !== undefined && corps.type !== null) {
+      const erreurs: ErreurBase[] = [];
+      decl = lireDeclaration({ type: corps.type, options: corps.options ?? undefined }, "type", erreurs);
+      if (!decl) throw new ErreurHttp(400, erreurs[0]?.message ?? "Type invalide.", "champ_invalide");
+    } else {
+      decl = this.bases.declarationPour(segs.join("/"), cle);
+    }
+    let valeur: ValeurSaisie | undefined;
+    if (!retirer) {
+      const v = validerSaisie(decl, corps.valeur);
+      if (!v.ok) throw new ErreurHttp(422, `Valeur refusée pour « ${cle} » : ${v.message}`, "valeur_invalide", { raison: "valeur_invalide" });
+      valeur = v.valeur;
+    }
+    let apres: string | null = null;
+    const r = await this.ecrivain.ecrire({
+      chemin: segs, revision: normEtag(ifMatch.split(",")[0]), action: "propriete", requete: requeteDe(ctx),
+      operation: { cle, valeur: retirer ? null : valeur, retirer, type: decl?.type ?? null, options: decl?.options ?? null },
+      transformer: (avant) => {
+        // Intégration lots 2 et 3 : le statut d'une demande de décision ne s'écrit que par le geste attesté
+        // (POST /api/decision) ; le panneau Propriétés l'affiche comme une déclaration, sans le modifier.
+        if ((cle === "statut" || cle === "engage") && lireProprietes(avant ?? "").valeurs.type === "decision") {
+          throw new ErreurHttp(422, `« ${cle} » d'une demande de décision ne se modifie pas ici : utilise la barre de décision (Approuver, Demander une correction, Refuser).`, "decision", { raison: "decision" });
+        }
+        let res = poserPropriete(avant ?? "", cle, valeur, { type: typeSocle(decl) });
+        // Lot 6 : désarchiver / déverrouiller une page qui n'avait pas d'en-tête la rend à l'octet (en-tête vide retiré).
+        if (retirer && CLES_PAGES.has(cle)) {
+          const d = decouper(res);
+          if (d.frontmatter && d.yaml.trim() === "") res = res.slice(d.frontmatter.length);
+        }
+        return (apres = res);
+      },
+      // Lot 6 : poser ou retirer `verrou` est la seule écriture admise sur une page verrouillée.
+      ...(cle === "verrou" ? { deverrouiller: true } : {}),
+    }, ctx.login);
+    const contenu = apres ?? (await lireConfine(this.cfg, await resoudre(this.cfg, segs), MAX_LECTURE)).contenu;
+    json(ctx, 200, { etag: r.etag, contenu, ...(r.inchange ? { inchange: true } : {}), ...(r.rejoue ? { rejoue: true } : {}) }, { ETag: r.etag });
+  }
+
+  /**
+   * POST /api/base/entree { page, source, titre } + X-Carnet-Requete : nouvelle entrée de la base, page au nom unique
+   * (« Titre.md », « Titre (2).md »…, création exclusive) dans `carnet.dossier`, avec les valeurs `carnet.nouvelle`.
+   */
+  async entreeBase(ctx: Ctx): Promise<void> {
+    const corps = await lireJson(ctx.req, 128 * 1024);
+    cheminPage(this.cfg, corps.page);
+    const source = lireSource(corps.source);
+    const { def, erreurs } = lireDefinition(source);
+    if (!def) throw erreurBase(erreurs);
+    if (!def.dossier) throw new ErreurHttp(422, "Cette base ne déclare pas de dossier pour ses nouvelles entrées (carnet.dossier).", "sans_dossier", { raison: "sans_dossier" });
+    const dossier = this.bases.dossierAutorise(def.dossier);
+    const brut = corps.titre === undefined || corps.titre === null ? "" : chaine(corps.titre, "titre", 200);
+    const titre = brut.replace(/\s*[\r\n]+\s*/g, " ").trim() || "Sans titre";
+    const r = await this.ecrivain.creerUnique({
+      dossier, base: titre, action: "base-entree", requete: requeteDe(ctx),
+      operation: { dossier: dossier.join("/"), titre, nouvelle: def.nouvelle },
+      transformer: () => {
+        let contenu = `# ${titre}\n\n`;
+        for (const [k, v] of Object.entries(def.nouvelle)) contenu = poserPropriete(contenu, k, v, { type: typeSocle(def.declarations.get(k)) });
+        return contenu;
+      },
+    }, ctx.login);
+    json(ctx, 201, { chemin: r.chemin, etag: r.etag, ...(r.rejoue ? { rejoue: true } : {}) }, { ETag: r.etag });
+  }
+
+  /** GET /api/proprietes?chemin=<page> : propriétés typées du frontmatter (panneau « Propriétés »). */
+  async lireProprietes(ctx: Ctx): Promise<void> {
+    const segs = cheminPage(this.cfg, ctx.url.searchParams.get("chemin"));
+    const p = this.espace.pages.get(segs.join("/"));
+    // page pas (encore) dans l'index (dossier sans page, renommage en cours) : rien à montrer, sans erreur
+    if (!p) {
+      json(ctx, 200, { chemin: segs.join("/"), absente: true, etag: null, yamlInvalide: null, nonModifiable: null, proprietes: [], base: null, declarations: [] });
+      return;
+    }
+    json(ctx, 200, { chemin: p.chemin, ...this.bases.proprietesDe(p) }, { ETag: p.etag });
+  }
+
 }
 
 

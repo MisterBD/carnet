@@ -1,5 +1,6 @@
 // Feuille modale : fenêtre centrée sur ordinateur, feuille qui monte du bas sur iPhone.
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function Feuille({ titre, onFermer, children, enHaut = false, sansTete = false, etiquette, large = false }: {
@@ -46,7 +47,9 @@ export function Feuille({ titre, onFermer, children, enHaut = false, sansTete = 
     };
   }, [onFermer]);
 
-  return (
+  // Intégration V3 : rendue dans <body> (portail) pour ne jamais dépendre d'un contexte d'empilement de la page (en-tête
+  // collant…) ; sinon la barre d'onglets iPhone du lot 1 passait par-dessus (feuille « Sur cette page » du lot 4).
+  return createPortal(
     <div className="voile" data-haut={enHaut} onMouseDown={(e) => { if (e.target === e.currentTarget) onFermer(); }}>
       <div className="dialogue" role="dialog" aria-modal="true" aria-label={etiquette ?? titre} ref={ref} tabIndex={-1} data-large={large ? "true" : undefined}>
         {!sansTete && (
@@ -59,6 +62,7 @@ export function Feuille({ titre, onFermer, children, enHaut = false, sansTete = 
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

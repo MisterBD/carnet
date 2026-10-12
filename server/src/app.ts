@@ -51,6 +51,11 @@ export async function creerApplication(cfg: Config, opts: { surveiller?: boolean
   const api = new Api(cfg, espace, diffuseur, verrou, git);
   const statique = new Statique(cfg.statique);
   await verrou.executer(async () => espace.appliquer(await espace.balayerTout()));
+  // reprise des écritures interrompues (intentions sans validation), puis index à jour
+  await verrou.executer(async () => {
+    const bilan = await api.ecrivain.reprendre();
+    if (bilan.faites) espace.appliquer(await espace.balayerTout());
+  });
 
   async function traiter(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const t0 = performance.now();

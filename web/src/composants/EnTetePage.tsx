@@ -1,24 +1,28 @@
 // En-tête d'une page, prêt à brancher dans PageVue (chantier « editeur » ou intégration) : couverture, icône, titre,
-// statut / étiquettes / résumé du frontmatter, rétroliens (« Mentionnée dans N pages »).
+// panneau « Propriétés » (V3 lot 2 : frontmatter typé et modifiable ; replié, il montre statut / étiquettes /
+// résumé comme avant), rétroliens (« Mentionnée dans N pages »).
 //
 // Composant CONTRÔLÉ : il n'écrit rien lui-même. PageVue garde la main sur l'enregistrement (fusion bloc par bloc,
 // ETag, conflits) et reçoit :
 //   - surTitre(v)        à chaque frappe dans le titre (sans retour à la ligne) ;
 //   - validerTitre()     à la perte de focus et sur Entrée (renommer le fichier si son nom suivait le titre :
-//                        voir `nomSuitLeTitre` de shared/navigation.ts et NOTES-NAVIGATION.md) ;
+//                        voir `nomSuitLeTitre` de shared/navigation.ts) ;
 //   - versCorps()        Entrée, Tab ou ↓ en fin de titre : donner le focus au début du corps ;
 //   - poserChamps({…})   icône (`icon`) et couverture (`cover`) : une ligne du frontmatter chacune
 //                        (poserChamp de shared/page.ts), valeur null = retirer la clé.
+//   - ecrirePropriete    (V3 lot 2) une propriété du panneau, écrite par le serveur (UNE propriété, révision
+//                        attendue) ; PageVue enregistre d'abord la saisie en cours puis suit la nouvelle version.
 // Le champ titre garde la classe `titre-page` : « Nouvelle page » y place le curseur (actions-pages.tsx).
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ImageIcon, CornerDownRight, SmilePlus } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ImageIcon, CornerDownRight, SmilePlus, ListPlus } from "lucide-react";
 import { api, urlFichier, type Retrolien } from "../api";
 import { useApp } from "../contexte-app";
 import { ecouter } from "../evenements";
 import { surLienInterne, urlDe } from "../navigation";
 import { IconePage } from "./Icone";
 import { SelecteurCouverture } from "./SelecteurCouverture";
-import { estEmoji, tonStatut } from "../outils";
+import { estEmoji } from "../outils";
+import { PanneauProprietes, type EcrirePropriete } from "../bases/PanneauProprietes";
 import { lireCouverture } from "../../../shared/navigation.ts";
 import { dossierDe, lireChampSimple, resoudre } from "../../../shared/page.ts";
 import "../styles/navigation.css";
@@ -34,8 +38,12 @@ export interface ProprietesEnTetePage {
   validerTitre(): void;
   versCorps(): void;
   poserChamps(champs: Record<string, string | null>): void;
+  /** V3 lot 2 : écrit UNE propriété du frontmatter (panneau « Propriétés »). Absent : panneau en lecture seule. */
+  ecrirePropriete?: EcrirePropriete;
   /** Page en lecture seule (lien symbolique vers une autre page) : rien n'est modifiable. */
   lectureSeule?: boolean;
+  /** K10-03 : affiché sous le titre, avant le panneau des propriétés (date et fraîcheur d'une préparation conservée). */
+  avantProprietes?: ReactNode;
 }
 
 export function lireEtiquettes(yaml: string): string[] {
@@ -49,16 +57,17 @@ export function lireEtiquettes(yaml: string): string[] {
   return [];
 }
 
-export function EnTetePage({ chemin, titre, yaml, surTitre, validerTitre, versCorps, poserChamps, lectureSeule }: ProprietesEnTetePage) {
+export function EnTetePage({ chemin, titre, yaml, surTitre, validerTitre, versCorps, poserChamps, ecrirePropriete, lectureSeule, avantProprietes }: ProprietesEnTetePage) {
   const app = useApp();
   const champ = useRef<HTMLTextAreaElement>(null);
   const [choixCouverture, setChoixCouverture] = useState(false);
   const icone = lireChampSimple(yaml, "icon") ?? app.index.get(chemin)?.icone ?? null;
   const valeurCouverture = lireChampSimple(yaml, "cover") ?? null;
   const couverture = lireCouverture(valeurCouverture);
-  const statut = lireChampSimple(yaml, "statut") ?? lireChampSimple(yaml, "status");
-  const etiquettes = lireEtiquettes(yaml);
-  const resume = lireChampSimple(yaml, "resume");
+  const [ajoutPropriete, setAjoutPropriete] = useState(false);
+  const [nbProprietes, setNbProprietes] = useState<number | null>(null);
+  const finAjout = useCallback(() => setAjoutPropriete(false), []);
+  const proposerPropriete = !lectureSeule && !!ecrirePropriete && nbProprietes === 0;
 
   useLayoutEffect(() => {
     const el = champ.current;
@@ -98,7 +107,7 @@ export function EnTetePage({ chemin, titre, yaml, surTitre, validerTitre, versCo
             <IconePage icone={icone} taille={estEmoji(icone) ? 48 : 40} />
           </button>
         )}
-        {!lectureSeule && (!icone || !couverture) && (
+        {!lectureSeule && (!icone || !couverture || proposerPropriete) && (
           <div className="en-tete-page__ajouts">
             {!icone && (
               <button type="button" className="tete-page__ajout-icone" onClick={() => void changerIcone()}>
@@ -108,6 +117,11 @@ export function EnTetePage({ chemin, titre, yaml, surTitre, validerTitre, versCo
             {!couverture && (
               <button type="button" className="tete-page__ajout-icone" onClick={() => setChoixCouverture(true)}>
                 <ImageIcon size={17} /> Ajouter une couverture
+              </button>
+            )}
+            {proposerPropriete && (
+              <button type="button" className="tete-page__ajout-icone" onClick={() => setAjoutPropriete(true)}>
+                <ListPlus size={17} /> Ajouter une propriété
               </button>
             )}
           </div>
@@ -135,13 +149,10 @@ export function EnTetePage({ chemin, titre, yaml, surTitre, validerTitre, versCo
             }
           }}
         />
-        {(statut || etiquettes.length > 0) && (
-          <div className="meta-page">
-            {statut && <span className="pastille" data-ton={tonStatut(statut)}>{statut}</span>}
-            {etiquettes.map((t) => <span key={t} className="pastille pastille--etiquette">#{t}</span>)}
-          </div>
-        )}
-        {resume && <p className="resume-page">{resume}</p>}
+        {/* K10-03 : préparation conservée : date et état de fraîcheur AVANT « Sources et traçabilité » (replié) */}
+        {avantProprietes}
+        <PanneauProprietes chemin={chemin} yaml={yaml} lectureSeule={lectureSeule} ecrire={ecrirePropriete}
+          ajout={ajoutPropriete} finAjout={finAjout} surNombre={setNbProprietes} />
         <Retroliens chemin={chemin} />
       </div>
       {choixCouverture && (

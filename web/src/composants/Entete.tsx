@@ -40,9 +40,9 @@ export function Entete({ fil, etat, actions }: { fil: MaillonFil[]; etat?: EtatE
     if (peutRevenir()) history.back();
     else naviguer(parent?.route ?? { vue: "accueil" });
   };
-  // Retour sur les pages, fichiers et historiques ; pas sur les écrans racine (accueil, projets, corbeille).
+  // Retour sur les pages, fichiers, historiques et préparations ; pas sur les écrans racine (accueil, projets, corbeille).
   const vue = lireRoute().vue;
-  const racine = vue !== "page" && vue !== "fichier" && vue !== "historique";
+  const racine = vue !== "page" && vue !== "fichier" && vue !== "historique" && vue !== "preparation";
   return (
     <header className="entete" data-defile={defile} data-titre-visible={titreVisible ? "true" : undefined}>
       <button type="button" className="bouton-icone entete__menu" onClick={app.ouvrirTiroir} aria-label="Ouvrir la liste des pages">

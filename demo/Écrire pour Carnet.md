@@ -58,7 +58,7 @@ Détail dans [[Projets/Fête du vélo]].
 Ce que tu peux utiliser :
 
 - **Encadrés** : `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, avec un titre facultatif après le type.
-- **Tâches** : `- [ ]` et `- [x]`. Les tâches ouvertes de toutes les pages sont rassemblées sur l'écran Accueil.
+- **Tâches** : `- [ ]` et `- [x]`. Les tâches ouvertes de toutes les pages sont rassemblées sur l'écran Aujourd'hui.
 - **Liens internes** : `[[Dossier/Page]]`, avec alias `[[Dossier/Page|texte]]` ou ancre `[[Dossier/Page#Titre]]`. Le chemin part de la racine de l'espace, sans `.md`.
 - **Relecture** : mets `statut: à relire` dans le frontmatter, ou écris la mention de la personne (`@` suivi de son prénom, tel que réglé dans `CARNET_PRENOM` ou `CARNET_MENTIONS`). La page remonte dans « À relire ».
 - **Signature** : termine ton bloc par `-- @ton-nom` pour qu'on sache qui a écrit.
@@ -80,12 +80,12 @@ flowchart LR
 {"data": {"values": [{"mois": "Juil", "velos": 31},
                      {"mois": "Août", "velos": 27}]},
  "mark": "bar",
- "encoding": {"x": {"field": "mois", "type": "ordinal", "sort": null},
+ "encoding": {"x": {"field": "mois", "type": "ordinal", "sort": null, "axis": {"labelAngle": 0}},
               "y": {"field": "velos", "type": "quantitative"}}}
 ```
 ````
 
-Les données Vega-Lite vont dans `data.values`. Un chargement externe (`data.url`, image distante) est refusé. Pour un gros jeu de données, dépose un CSV dans `_assets/` et mets un lien dessus.
+Les données Vega-Lite vont dans `data.values`. Un chargement externe (`data.url`, image distante) est refusé. Pour un gros jeu de données, dépose un CSV dans `_assets/` et mets un lien dessus. Axe X en catégories (mois, semaines, noms) : ajoute `"axis": {"labelAngle": 0}` à l'encodage `x`, sinon les étiquettes sont tournées de 90°.
 
 ## Niveau 2 : des propriétés cohérentes (tableaux et kanban)
 

@@ -1,0 +1,237 @@
+/* Carnet V3 · lot 5 « Fiabilité » : bandeaux « non enregistré » et « conflit », écran « Écritures en attente »,
+   « Revenir à la version marquée vue ». Jetons de jetons.css seulement (clair et sombre). */
+
+.bandeau-brouillon {
+  background: var(--rouge-fond);
+  color: var(--rouge);
+}
+
+.bandeau-brouillon .bandeau-brouillon__icone {
+  flex: none;
+}
+
+.bandeau-brouillon button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bandeau-brouillon button.primaire {
+  background: var(--rouge);
+  border-color: var(--rouge);
+  color: var(--feuille);
+}
+
+.bandeau-conflit {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.bandeau-conflit > p {
+  flex: none;
+}
+
+.bandeau-conflit__choix {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bandeau-conflit__choix button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bandeau-conflit__comparaison {
+  background: var(--feuille);
+  color: var(--encre);
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon-petit);
+  padding: 10px 12px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.bandeau-conflit__legende,
+.retour-vue__legende {
+  margin: 0 0 8px;
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+/* ---------- Écritures en attente ---------- */
+
+.vue-attente section {
+  margin-top: var(--e5);
+}
+
+.vue-attente__titre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  margin: 0 0 4px;
+}
+
+.vue-attente__aide {
+  color: var(--encre-3);
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.vue-attente__vide {
+  color: var(--encre-2);
+  margin: 0;
+  padding: 12px 0;
+}
+
+.liste-attente {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon);
+  background: var(--feuille);
+}
+
+.attente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+}
+
+.attente + .attente {
+  border-top: 1px solid var(--trait);
+}
+
+.attente__texte {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attente__titre {
+  font-weight: 600;
+  color: var(--encre);
+  overflow-wrap: anywhere;
+}
+
+a.attente__titre {
+  text-decoration: none;
+}
+
+a.attente__titre:hover {
+  text-decoration: underline;
+}
+
+.attente__meta {
+  color: var(--encre-3);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.attente[data-etat="conflit"] .attente__meta,
+.attente[data-etat="indeterminee"] .attente__meta {
+  color: var(--ambre);
+}
+
+.attente__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attente__actions .bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (pointer: coarse) {
+  .attente__actions .bouton {
+    min-height: var(--cible);
+  }
+}
+
+/* ---------- Revenir à la version marquée vue ---------- */
+
+.retour-vue {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--trait-fort);
+  border-radius: var(--rayon);
+  background: var(--surface);
+}
+
+.retour-vue__portee {
+  margin: 0 0 8px;
+}
+
+.retour-vue__ecritures {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--encre-2);
+  font-size: 14px;
+}
+
+.retour-vue__ecritures:empty {
+  display: none;
+}
+
+.retour-vue__alerte,
+.retour-vue__erreur {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--rayon-petit);
+  background: var(--ambre-fond);
+  color: var(--ambre);
+}
+
+.retour-vue__humaines {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--rayon-petit);
+  background: var(--rouge-fond);
+  color: var(--rouge);
+  cursor: pointer;
+}
+
+.retour-vue__humaines input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex: none;
+}
+
+.retour-vue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.retour-vue__actions .bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (pointer: coarse) {
+  .retour-vue__actions .bouton {
+    min-height: var(--cible);
+  }
+}

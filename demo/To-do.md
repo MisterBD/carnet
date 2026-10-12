@@ -5,7 +5,7 @@ resume: "La liste de la semaine de l'atelier, avec des cases à cocher."
 ---
 # To-do de la semaine
 
-Les cases se cochent ici, ou depuis l'écran **Accueil** qui rassemble les tâches ouvertes de toutes les pages.
+Les cases se cochent ici, ou depuis l'écran **Aujourd'hui** qui rassemble les tâches ouvertes de toutes les pages.
 
 ## Aujourd'hui
 

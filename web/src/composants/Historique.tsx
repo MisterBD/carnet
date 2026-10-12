@@ -39,7 +39,7 @@ function titreVersion(v: Version): string {
 }
 
 function libelleSource(v: Version): string {
-  if (v.source === "instantane") return v.auto ? "Instantané avant restauration" : "Instantané";
+  if (v.source === "instantane") return v.genre === "seance" ? "Version automatique" : v.genre === "avant-retour" ? "Version annulée (retour à la version vue)" : v.auto ? "Instantané avant restauration" : "Instantané";
   return "Sauvegarde git";
 }
 
@@ -49,6 +49,7 @@ export function Historique({ chemin }: { chemin: string }) {
   const titrePage = noeud?.titre ?? feuille(chemin);
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [git, setGit] = useState(true);
+  const [pause, setPause] = useState(0);
   const [actuelle, setActuelle] = useState<{ contenu: string; etag: string | null; absente: boolean } | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
@@ -64,6 +65,7 @@ export function Historique({ chemin }: { chemin: string }) {
       const [h, p] = await Promise.all([api.historique(chemin), api.page(chemin)]);
       setVersions(h.versions);
       setGit(h.git);
+      setPause(h.pauseVersions ?? 0);
       setActuelle({ contenu: p.contenu, etag: p.etag, absente: Boolean(p.absente) });
       setErreur(null);
       setSelection((s) => s ?? (h.versions[0]?.id ?? ACTUELLE));
@@ -170,6 +172,7 @@ export function Historique({ chemin }: { chemin: string }) {
           </div>
           <p className="historique__note">
             {git ? "Les versions viennent des sauvegardes git de l'espace et des instantanés que tu prends." : "Pas de sauvegarde git ici : seuls tes instantanés sont gardés."}
+            {pause > 0 && ` Carnet garde aussi une version automatique quand tu reprends l'écriture après ${pause} min de pause.`}
           </p>
           <button type="button" className="bouton bouton--petit historique__instantane" onClick={() => void instantane()}>
             <Camera size={16} /> Prendre un instantané

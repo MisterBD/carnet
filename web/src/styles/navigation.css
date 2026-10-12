@@ -298,6 +298,20 @@
   .entete[data-titre-visible="true"] .fil .fil__maillon[data-dernier="true"] .fil__courant {
     animation: apparition var(--duree-entree) ease-out;
   }
+  /* #6 : grand titre sorti de l'écran : le titre courant prend toute la place, le parent se réduit à la flèche « ‹ »
+     (bouton retour, 44 px) ; au repos, le parent seul reste affiché */
+  .entete[data-titre-visible="true"] .fil .fil__maillon[data-parent="true"]:not([data-dernier="true"]),
+  .entete[data-titre-visible="true"] .fil .fil__maillon[data-dernier="true"] .fil__sep {
+    display: none;
+  }
+  .entete[data-titre-visible="true"] .fil .fil__maillon[data-dernier="true"] .fil__courant {
+    font-weight: 600;
+    max-width: 100%;
+  }
+  /* l'étoile reste dans le menu « … » (Ajouter aux favoris) : la place va au titre et au sommaire */
+  .entete .entete__favori {
+    display: none;
+  }
 }
 
 /* ---------- Vues (corbeille, historique) ---------- */

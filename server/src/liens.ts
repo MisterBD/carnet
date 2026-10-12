@@ -1,7 +1,7 @@
 // Carnet · rétroliens (« pages qui pointent ici ») et aperçu d'une page, calculés à la demande sur l'index mémoire.
 import { dossierDe, resoudre } from "../../shared/page.ts";
 import type { Espace, Page } from "./espace.ts";
-import { horsCodeEnLigne, marquerCode, RE_LIEN_MD, RE_WIKI } from "./markdown.ts";
+import { BORNE_LIEN, finirExtrait, horsCodeEnLigne, marquerCode, RE_LIEN_MD, RE_WIKI } from "./markdown.ts";
 
 export interface Retrolien {
   chemin: string;
@@ -47,17 +47,18 @@ function indexParNom(connus: Set<string>): Map<string, string[]> {
 
 /** Ligne d'un lien, nettoyée pour l'affichage (≤ 160 caractères). */
 export function nettoyerLigne(l: string, max = 160): string {
-  let t = l.trim()
+  const B = BORNE_LIEN;
+  let t = l.replace(/\u0000/g, "").trim()
     .replace(/^>\s*\[!\w+\][+-]?\s*/, "")
     .replace(/^(?:>\s*)+/, "")
     .replace(/^#{1,6}\s+/, "")
     .replace(/^([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_t, c: string, a?: string) => a || String(c).split("/").pop() || c)
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`~]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_t, a: string) => B + a + B)
+    .replace(/\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_t, c: string, a?: string) => B + (a || String(c).split("/").pop() || c) + B)
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, (_t, x: string) => B + x + B)
+    .replace(/[*_`~]+/g, "");
+  // liens accolés séparés, entités (« &#x20; ») décodées APRÈS le retrait du balisage, espaces repliées
+  t = finirExtrait(t);
   if (t.length > max) t = t.slice(0, max - 1).trimEnd() + "…";
   return t;
 }

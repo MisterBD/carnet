@@ -1,6 +1,6 @@
 // État partagé de l'application : configuration, arbre, favoris, dialogues, notifications.
 import { createContext, useContext } from "react";
-import type { Config, Noeud, Position } from "./api";
+import type { Config, DestinationBase, Noeud, Position } from "./api";
 import type { ActionMenu } from "./composants/Dialogues";
 
 export interface OptionsTexte { titre: string; texte?: string; valeur?: string; placeholder?: string; bouton?: string }
@@ -31,12 +31,20 @@ export interface App {
   nouvellePage(parent: string): Promise<string | null>;
   /** Menu « … » d'une page, ancré sous `ancre` sur ordinateur (à défaut : le dernier bouton touché), feuille sur iPhone. */
   menuPage(chemin: string, ancre?: HTMLElement | null): Promise<void>;
-  deplacerPage(source: string, parent: string): Promise<string | null>;
+  deplacerPage(source: string, parent: string, base?: DestinationBase | null): Promise<string | null>;
   /** Glisser-déposer, Monter / Descendre : avant ou après une page sœur, ou dans une page. */
   placerPage(source: string, cible: string, position: Position): Promise<void>;
   /** Corbeille sans confirmation, avec « Annuler » pendant 8 s. */
   supprimerPage(chemin: string): Promise<void>;
   deplier(chemin: string): void;
+  /** Lot 1 : ouvre la feuille de capture (＋, ⌘⇧N). */
+  capturer(): void;
+  /** Lot 1 : nombre de captures dans la boîte de réception. */
+  nbBoite: number;
+  /** Lot 6 : dialogue « Nouvelle page depuis un modèle » (sous `parent` si donné) ; ouvre la page créée sauf `ouvrirPage: false`. */
+  nouvelleDepuisModele(parent?: string | null, ouvrirPage?: boolean): Promise<string | null>;
+  /** Lot 6 : ouvre (crée au besoin) Journal/AAAA-MM-JJ.md ; renvoie un message d'erreur, ou null. */
+  ouvrirJournal(): Promise<string | null>;
 }
 
 export const ContexteApp = createContext<App | null>(null);

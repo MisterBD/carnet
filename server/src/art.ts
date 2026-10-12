@@ -1,4 +1,4 @@
-// Carnet · artefacts : signature /_art (même jeton que deploy/art/app/art.py) et liste des artefacts.
+// Carnet · artefacts : signature /_art (même jeton que artefacts/app/art.py) et liste des artefacts.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import type { FileHandle } from "node:fs/promises";

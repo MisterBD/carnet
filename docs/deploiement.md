@@ -38,6 +38,8 @@ puis `docker compose up -d`. Le dossier doit appartenir à l'utilisateur renseig
 
 Carnet ajoute deux choses dans ton dossier, toutes deux cachées : `.carnet/ordre.json` (le rangement manuel de l'arbre, créé au premier glisser-déposer) et `.corbeille/` (les pages supprimées). Si ton dossier est sous git, tu peux les versionner ou les ignorer, au choix.
 
+Trois dossiers ordinaires, visibles dans l'arbre, n'apparaissent que si tu t'en sers : `Inbox/` (une page par capture, voir `CARNET_INBOX`), `Journal/` (une page par jour, `Journal/AAAA-MM-JJ.md`, créée par le bouton du journal) et `Modèles/` (tes modèles de page, que tu crées toi-même). Une écriture interrompue par un arrêt brutal peut laisser un fichier temporaire caché (`.<nom>.carnet-<aléa>.tmp`) : il n'est jamais lu comme une page et il est retiré au redémarrage.
+
 ### Masquer des dossiers
 
 `CARNET_MASQUES=prive brouillons` : ces dossiers de **premier niveau** ne sont jamais lus, listés, cherchés ni servis (un dossier du même nom plus profond n'est pas concerné). Les dossiers et fichiers cachés (`.git`, `.corbeille`, `.carnet`, `.env`…) et le dossier `artefacts/` (comme pages) le sont toujours, sans réglage. Sers-t'en pour un dossier que tes agents remplissent de données brutes (journaux de session, exports) qui n'ont rien à faire dans une interface.
@@ -56,7 +58,7 @@ Les réglages vont dans `.env` (modèle : `.env.example`). Le fichier n'est jama
 | `CARNET_ART_BASE` | `http://127.0.0.1:3006` | origine par défaut du serveur d'artefacts (hôte non reconnu) |
 | `TZ` | `Europe/Paris` | fuseau horaire (dates « il y a… », corbeille, instantanés) |
 
-`compose.yml` transmet au conteneur les variables de Carnet ci-dessous qui ont un sens dans `.env` ; les autres (`CARNET_ESPACE`, `CARNET_PORT`, `CARNET_HOTE`, `CARNET_STATIQUE`, `CARNET_CLE`, `CARNET_ETAT`) sont fixées par `compose.yml` lui-même.
+`compose.yml` transmet au conteneur les variables de Carnet ci-dessous qui ont un sens dans `.env` (`CARNET_PAUSE_VERSIONS` et `CARNET_TECHNIQUES` comprises) ; les autres (`CARNET_ESPACE`, `CARNET_PORT`, `CARNET_HOTE`, `CARNET_STATIQUE`, `CARNET_CLE`, `CARNET_ETAT`) sont fixées par `compose.yml` lui-même.
 
 ### Réglages de Carnet (service `carnet`)
 
@@ -69,6 +71,10 @@ Toutes les variables lues par le serveur (`server/src/config.ts`, plus `CARNET_J
 | `CARNET_PRENOM` | vide | prénom affiché à l'accueil (« Bonjour, Camille ») ; sert de mention par défaut |
 | `CARNET_MENTIONS` | `@` + premier mot du prénom, en minuscules et sans accents | mentions qui placent une page dans « À relire », séparées par des espaces (`@camille @relecture`) ; une valeur vide n'en garde aucune |
 | `CARNET_MASQUES` | vide | dossiers de premier niveau jamais lus, listés ni servis, séparés par des espaces |
+| `CARNET_INBOX` | `Inbox` | dossier de la **boîte de réception** : chaque capture (＋, ⌘⇧N) y devient une page. Chemin relatif simple (`Notes/Boîte` possible), ni caché, ni masqué ; la casse compte (`inbox/` est un autre dossier, jamais confondu ni masqué) |
+| `CARNET_FUSEAU` | `Europe/Paris` | fuseau IANA de l'écran Aujourd'hui (en retard, aujourd'hui, 7 jours) et des horodatages de capture (`cree`) |
+| `CARNET_TECHNIQUES` | `défaut` | **fichiers des agents** : regroupés à part dans l'arbre et exclus d'Aujourd'hui, des récents et des nouveautés, mais toujours ouvrables. Règles séparées par `;` (voir plus bas) |
+| `CARNET_PAUSE_VERSIONS` | 10 | **versions automatiques** : après tant de minutes sans écriture d'une page, l'enregistrement suivant garde d'abord la version d'avant dans l'historique (0 : jamais ; 0 à 1440) |
 | `CARNET_UTILISATEURS_AUTORISES` | vide | **comptes autorisés** (login ou e-mail posé par le proxy), séparés par des espaces. Obligatoire hors `CARNET_DEV=1` : le serveur refuse de démarrer sans. Ancien nom accepté : `CARNET_UTILISATEURS` |
 | `CARNET_ENTETE_IDENTITE` | `Tailscale-User-Login` | en-tête qui porte le login |
 | `CARNET_ENTETE_NOM` | `Tailscale-User-Name` | en-tête qui porte le nom affiché (facultatif) |
@@ -76,7 +82,7 @@ Toutes les variables lues par le serveur (`server/src/config.ts`, plus `CARNET_J
 | `CARNET_DEV` | 0 | 1 : requêtes sans identité acceptées. Essai local seulement, refusé si une origine n'est pas locale |
 | `CARNET_CLE` | vide (signature coupée) | fichier de la clé de signature des liens d'artefacts (64 caractères hexadécimaux) |
 | `CARNET_ART_TTL` | 900 | durée de vie d'un lien d'artefact, en secondes (30 à 86400) |
-| `CARNET_ETAT` | `~/.local/state/carnet` | dossier d'état, **hors** des pages : favoris et instantanés de l'historique |
+| `CARNET_ETAT` | `~/.local/state/carnet` | dossier d'état, **hors** des pages : favoris, instantanés, journaux d'écriture, attestations des décisions, clés d'accès, références des nouveautés (voir « Le dossier d'état ») |
 | `CARNET_CORBEILLE_JOURS` | 30 | jours avant l'effacement automatique d'une page de la corbeille (0 : jamais) |
 | `CARNET_GIT` | `auto` | historique git : `auto` (le dépôt qui contient le dossier de pages), `non`, ou chemin absolu d'un dossier git (voir plus bas) |
 | `CARNET_GIT_PREFIXE` | vide | chemin du dossier de pages dans le dépôt, quand `CARNET_GIT` est un chemin (`notes`) |
@@ -89,6 +95,22 @@ Toutes les variables lues par le serveur (`server/src/config.ts`, plus `CARNET_J
 | `CARNET_REGROUPEMENT_MS` | 120 | regroupement des événements du disque avant l'envoi en direct |
 | `CARNET_PING_MS` | 20000 | battement du flux en direct |
 | `CARNET_JOURNAL` | 1 | 0 coupe le journal |
+
+Deux variables servent seulement aux tests de bout en bout et ne doivent **jamais** être posées en production : `CARNET_PANNE_ESSAI` (le serveur s'arrête brutalement pendant une écriture, pour vérifier la reprise) et `CARNET_HORLOGE_ESSAI` (horloge fixe pour les dates relatives des bases). Le serveur écrit un avertissement au démarrage si l'une d'elles est posée.
+
+### Fichiers des agents (`CARNET_TECHNIQUES`)
+
+Les fichiers que tes agents tiennent pour eux-mêmes (consignes, journaux, données brutes) encombrent l'arbre et l'écran Aujourd'hui. Ces règles les regroupent, repliés, dans une rubrique « Fichiers des agents » en bas de l'arbre, sans les cacher. Grammaire fermée, sans joker :
+
+| Règle | Désigne |
+|---|---|
+| `NOM.md` | un fichier de ce nom, à n'importe quelle profondeur (`CLAUDE.md`) |
+| `dossier/` | un dossier de ce nom, à n'importe quelle profondeur, avec son contenu |
+| `/a/b.md`, `a/b/` | un chemin ancré à la racine du dossier de pages |
+| `!règle` | une exception : jamais un fichier des agents (`!raw/LISEZ-MOI.md`) |
+| `défaut` | la liste fournie : `AGENTS.md`, `AGENTS-lite.md`, `CLAUDE.md`, `CONFIG.md`, `log.md`, `raw/` |
+
+Exemple : `CARNET_TECHNIQUES=défaut;journaux/;!raw/LISEZ-MOI.md`. Une valeur vide ne regroupe rien. La casse compte. La boîte de réception n'est jamais concernée : une règle qui la viserait est ignorée, avec un avertissement au démarrage.
 
 ### Réglages du serveur d'artefacts (service `artefacts`)
 
@@ -146,6 +168,48 @@ node server/src/main.ts
 ```
 
 Ouvre <http://127.0.0.1:3020>. Les deux processus écoutent sur `127.0.0.1` seulement ; les mêmes règles d'exposition s'appliquent (un proxy authentifiant devant, `CARNET_DEV` à 0 et une liste de comptes dès que ce n'est plus un essai local).
+
+## Le dossier d'état
+
+`CARNET_ETAT` (`.etat/` à côté de `compose.yml` en Docker) ne contient jamais tes pages, et Carnet n'écrit jamais ces informations dans ton dossier de pages. Il est créé en `0700`, ses fichiers sensibles en `0600`.
+
+| Emplacement | Contenu |
+|---|---|
+| `favoris.json` | les favoris |
+| `instantanes/<espace>/` | les instantanés de l'historique, dont les versions automatiques et la version annulée par un retour à la version vue |
+| `journal/<espace>/ecritures.jsonl` | une ligne par écriture faite par Carnet (qui, quoi, quel chemin, révisions avant et après) ; rotation à 10 Mo |
+| `journal/<espace>/intentions.jsonl` | l'intention notée avant chaque écriture, pour reprendre proprement après un arrêt brutal |
+| `journal/<espace>/requetes.jsonl` | les réponses des requêtes rejouables, gardées 7 jours (un renvoi après une coupure n'écrit pas deux fois) |
+| `journal/<espace>/attestations.jsonl` | les attestations signées des décisions (approuver, demander une correction, refuser) |
+| `journal/<espace>/indeterminees.json` | les écritures dont l'issue n'a pas pu être établie après un arrêt (jamais réparées en silence) |
+| `cles/<espace>/` | les clés d'accès enregistrées (clés publiques) et l'empreinte du code d'enrôlement en cours |
+| `nouveautes/<espace>/<lecteur>/` | pour chaque lecteur, la version de chaque page marquée « vue » (copie exacte), base de l'écran Nouveautés et du retour à la version vue |
+| `cle-attestations.key` | clé de signature des attestations, créée seulement si `CARNET_CLE` n'est pas renseignée |
+
+Les attestations sont signées avec une clé dérivée de `CARNET_CLE` (la clé des liens d'artefacts) ou, à défaut, de `cle-attestations.key`. Sauvegarde le dossier d'état **avec** cette clé : sans elle, les attestations ne se vérifient plus.
+
+## Clés d'accès (WebAuthn) pour les décisions
+
+Une clé d'accès (Face ID ou Touch ID, une clé de sécurité, le gestionnaire de clés d'un navigateur) prouve qu'un geste de décision a été fait par une personne, sur un appareil enregistré, et non par un programme qui partage ton identité. Elle ne sert qu'aux décisions ; elle ne remplace pas l'authentification du proxy.
+
+- **Désactivée tant qu'aucune clé n'est enregistrée.** Les décisions restent possibles et sont enregistrées comme « geste non prouvé ».
+- **Dès qu'une clé existe, toute décision l'exige** (sinon `403 cle_requise`). Pour revenir en arrière, retire toutes les clés.
+- **Il faut HTTPS** (ou `localhost` pour un essai) : les navigateurs refusent les clés d'accès ailleurs.
+- **Une clé vaut pour un nom d'hôte** : celui de l'origine de l'application (`carnet.exemple.org`, `ma-machine.mon-reseau.ts.net`). Si tu ouvres Carnet par deux noms, enregistre une clé pour chacun. L'écran le signale.
+- **Aucune route HTTP ne crée de code ni ne retire de clé.** L'enregistrement exige un code à usage unique créé sur le serveur, par la commande d'administration. Seule son empreinte est gardée ; il expire (30 minutes par défaut) et il est annulé après 5 essais faux. Il faut un code par clé.
+
+En Docker, la commande tourne dans le conteneur `carnet`, avec le même utilisateur et le même dossier d'état que le serveur :
+
+```bash
+docker compose exec carnet node src/admin-cles.ts code               # code d'enrôlement, valable 30 minutes
+docker compose exec carnet node src/admin-cles.ts code --minutes 10  # durée choisie (1 à 1440 minutes)
+docker compose exec carnet node src/admin-cles.ts liste              # clés enregistrées : début d'identifiant, nom, hôte, dates
+docker compose exec carnet node src/admin-cles.ts retirer 3f9a1c     # retire la clé dont l'identifiant commence ainsi (6 caractères au moins)
+```
+
+Puis, **depuis l'appareil à enregistrer**, ouvre Carnet, écran Décisions, « Clés d'accès », et saisis le code. Le serveur relit les clés à chaque demande : aucun redémarrage n'est nécessaire.
+
+Hors Docker, depuis la racine du dépôt, avec les mêmes variables que le serveur : `CARNET_ETAT=.etat CARNET_NOM_ESPACE=demo node server/src/admin-cles.ts liste` (ou les options `--etat <dossier>` et `--espace <nom>`).
 
 ## Trois façons de l'ouvrir à tes appareils
 
@@ -256,17 +320,36 @@ CARNET_UTILISATEURS_AUTORISES=toi@exemple.org
 
 ## Opérations
 
-**Sauvegarde.** Tes pages sont des fichiers : sauvegarde le dossier (`rsync`, git, instantané du disque). Il contient aussi le rangement de l'arbre (`.carnet/ordre.json`) et la corbeille (`.corbeille/`). Le dossier d'état (`.etat/` en Docker, `CARNET_ETAT` sinon) garde les favoris et les instantanés de l'historique : sauvegarde-le aussi si tu y tiens. Mets le dossier de pages sous git pour garder l'historique complet : tes agents peuvent y faire un commit par intention.
+**Sauvegarde.** Tes pages sont des fichiers : sauvegarde le dossier (`rsync`, git, instantané du disque). Il contient aussi le rangement de l'arbre (`.carnet/ordre.json`) et la corbeille (`.corbeille/`). Le dossier d'état (`.etat/` en Docker, `CARNET_ETAT` sinon) garde les favoris, les instantanés, le journal des écritures, les attestations des décisions, les clés d'accès et les références des nouveautés : sauvegarde-le aussi, avec `secrets/art-hmac.key` (voir « Le dossier d'état »). Mets le dossier de pages sous git pour garder l'historique complet : tes agents peuvent y faire un commit par intention.
 
 **Corbeille.** Une page supprimée y reste `CARNET_CORBEILLE_JOURS` jours (30 par défaut), puis elle est effacée (vérification au démarrage, puis toutes les 24 heures). La page **Corbeille** de l'interface permet de restaurer, d'effacer un élément ou de tout vider.
 
-**Mise à jour.** `git pull && docker compose up -d --build`. Relis `THIRD_PARTY_NOTICES.md` et le journal des changements. Les images de base sont épinglées par version et empreinte dans les `Dockerfile` : leur mise à jour est une modification de fichier, à relire.
+**Mise à jour.** `git pull && docker compose up -d --build`. Relis `THIRD_PARTY_NOTICES.md` et le journal des changements. Les images de base sont épinglées par version et empreinte dans les `Dockerfile` : leur mise à jour est une modification de fichier, à relire. Depuis la V2, voir la section suivante.
 
 **Kit d'artefacts.** Il est reconstruit à la construction de l'image (versions épinglées, empreintes sha512 vérifiées, avis de sécurité interrogés). Pour comparer aux dernières versions : `cd artefacts && ./maj-kit.sh --etat`.
 
-**Rotation de la clé.** Remplace le contenu de `secrets/art-hmac.key` (64 caractères hexadécimaux) : elle est relue sans redémarrage et tous les liens en cours deviennent invalides.
+**Rotation de la clé.** Remplace le contenu de `secrets/art-hmac.key` (64 caractères hexadécimaux) : elle est relue sans redémarrage et tous les liens en cours deviennent invalides. Attention : la clé des attestations en est dérivée. Après une rotation (et le redémarrage suivant), les attestations déjà enregistrées ne se vérifient plus et les décisions passées apparaissent comme non attestées. Si l'historique prouvé des décisions compte pour toi, garde la clé ou archive l'ancienne avec le dossier d'état.
 
 **Durcissement déjà en place.** Utilisateur non root, système de fichiers en lecture seule, `cap_drop: ALL`, `no-new-privileges`, mémoire, CPU et processus plafonnés, réseaux Docker distincts, ports sur `127.0.0.1` seulement, images épinglées.
+
+## Mettre à jour depuis la V2
+
+La V3 ne demande aucune migration de tes pages : le format reste du Markdown avec un frontmatter, et une page ouverte sans modification n'est toujours jamais réécrite.
+
+1. **Sauvegarde** le dossier de pages, le dossier d'état et `secrets/art-hmac.key`.
+2. **Récupère la V3** et reconstruis : `git pull && docker compose up -d --build`. Si tu as gardé un ancien `compose.yml` modifié, reporte les nouvelles variables (`CARNET_INBOX`, `CARNET_FUSEAU`, `CARNET_TECHNIQUES`, `CARNET_PAUSE_VERSIONS`) et vérifie que le dossier d'état est bien monté en écriture (`./.etat:/etat`) : la V3 y écrit ses journaux à chaque modification.
+3. **Toutes les nouvelles variables sont facultatives** ; leurs défauts conviennent à un premier essai. Règle au moins `CARNET_FUSEAU` si tu n'es pas à l'heure de Paris, et `CARNET_TECHNIQUES` si tes agents rangent leurs fichiers ailleurs que dans `raw/`.
+4. **Recharge l'application** sur chaque appareil (sur iPhone, ferme puis rouvre l'application installée) : la nouvelle interface remplace l'ancienne au premier chargement.
+
+Ce qui change à l'usage :
+
+- L'écran d'accueil devient **Aujourd'hui** (tâches en retard, du jour et des 7 prochains jours, décisions, missions, nouveautés, pages à relire, récents). Une page `Accueil.md` que tu aurais créée reste une page ordinaire.
+- Au premier démarrage, **Nouveautés** prend l'état actuel comme point de départ : toutes les pages existantes sont considérées comme vues, rien ne déborde. Seules les modifications suivantes y apparaissent.
+- Les **clés d'accès** sont inactives tant que tu n'en enregistres pas (section précédente) ; les décisions sont alors notées « geste non prouvé ».
+- Une saisie qui n'a pas pu partir (coupure réseau, serveur arrêté, page verrouillée) est désormais **gardée dans le navigateur** puis renvoyée avec sa révision d'origine ; si la page a changé entre-temps, un conflit visible te laisse choisir. Ce brouillon reste propre à ce navigateur.
+- Les dossiers `Inbox/`, `Journal/` et `Modèles/` n'apparaissent que lorsque tu t'en sers.
+
+Pour revenir à la V2 : reconstruis l'ancienne version. Tes pages restent des fichiers Markdown lisibles, mais la V2 ignore les propriétés ajoutées par la V3 : elle ne respecte pas `verrou: true`, ne masque pas les pages `archive: true` et ne vérifie aucune décision. Les écritures faites sous la V2 ne passent pas par le journal : de retour en V3, elles apparaîtront dans Nouveautés comme des modifications d'auteur non vérifié.
 
 ## Dépannage
 
@@ -281,3 +364,9 @@ CARNET_UTILISATEURS_AUTORISES=toi@exemple.org
 | la construction de l'image des artefacts échoue | registre npm injoignable, ou avis de sécurité sur une version épinglée (le message le dit) |
 | l'historique dit « Pas de sauvegarde git ici » | pas de commande `git` (installation hors Docker), dossier hors d'un dépôt, dépôt invisible pour le conteneur (voir `CARNET_GIT`), ou dépôt appartenant à un autre utilisateur ; la ligne `historique_git` du journal donne la raison |
 | l'écran hors ligne parle d'un réseau qui n'est pas le tien | `CARNET_RESEAU` ; il est retenu par le navigateur au dernier démarrage réussi |
+| « Aucune clé d'accès enregistrée pour … » | la clé a été enregistrée sous un autre nom d'hôte : enregistres-en une pour celui-ci (un code par clé) |
+| le navigateur ne propose aucune clé d'accès | Carnet n'est pas servi en HTTPS (ni sur `localhost`), ou l'appareil n'a pas de clé pour ce nom d'hôte |
+| `403 cle_requise` sur une décision | une clé d'accès est enregistrée : toute décision passe désormais par elle |
+| « Trop d'essais : le code est annulé » | 5 codes faux : crée un nouveau code avec `admin-cles.ts code` |
+| le démarrage avertit d'une règle `CARNET_TECHNIQUES` ignorée | elle visait la boîte de réception, qui n'est jamais regroupée |
+| `423` à l'enregistrement | la page porte `verrou: true` : elle est en lecture seule ; ta saisie est gardée dans le navigateur (copier, créer une copie ou abandonner) |

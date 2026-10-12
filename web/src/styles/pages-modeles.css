@@ -1,0 +1,147 @@
+/* Carnet V3 · lot 6 « Pages » : dialogue « Nouvelle page depuis un modèle », bouton Journal du jour. */
+
+.modeles__lieu {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--encre-2);
+}
+
+.modeles__etiquette {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--encre-2);
+}
+
+.modeles .champ.modeles__titre {
+  font-size: 17px; /* ≥ 16 px : pas de zoom automatique d'iOS */
+}
+
+.modeles__liste {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 38vh;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.modeles__choix {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--cible, 44px);
+  padding: 6px 12px;
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon-petit, 8px);
+  background: var(--feuille);
+  color: var(--encre);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modeles__choix[aria-checked="true"] {
+  border-color: var(--indigo);
+  background: var(--indigo-voile);
+  font-weight: 600;
+}
+
+.modeles__choix:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+@media (hover: hover) {
+  .modeles__choix:hover {
+    background: var(--survol);
+  }
+  .modeles__choix[aria-checked="true"]:hover {
+    background: var(--indigo-voile);
+  }
+}
+
+.modeles__icone {
+  display: inline-flex;
+  width: 22px;
+  justify-content: center;
+  flex: none;
+}
+
+.modeles__nom {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modeles__vide,
+.modeles__attente {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--encre-3);
+}
+
+.modeles__vide code {
+  font-family: var(--police-code);
+  font-size: 13px;
+}
+
+.modeles__erreur {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--rouge-fond);
+  color: var(--rouge);
+  font-size: 15px;
+}
+
+.modeles .boutons {
+  margin-top: 16px;
+}
+
+.modeles .boutons .bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (pointer: coarse) {
+  .modeles .boutons .bouton {
+    min-height: var(--cible, 44px);
+  }
+}
+
+/* Barre latérale : « Nouvelle page » + bouton carré « depuis un modèle » */
+.nouvelle-groupe {
+  display: flex;
+  gap: 6px;
+}
+
+.nouvelle-groupe .bouton-nouvelle {
+  flex: 1;
+  min-width: 0;
+}
+
+.nouvelle-groupe .nouvelle-groupe__modele {
+  flex: none;
+  width: 44px;
+  padding: 0;
+}
+
+/* Écran Aujourd'hui : trois actions (Capturer, Rechercher, Journal du jour) */
+@media (min-width: 600px) {
+  .accueil__actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 599px) {
+  .accueil__actions > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}

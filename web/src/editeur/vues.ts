@@ -10,6 +10,8 @@ import { ic, icDivers, icEncadre, CASE_VIDE, CASE_COCHEE } from "./icones";
 import type { Magasin } from "./ui/magasin";
 import { rectDe } from "./ui/magasin";
 import { libelleLangue, typeApercu } from "./langues";
+import { ouvrirVisionneuse } from "./visionneuse";
+import { boutonCopier, texteUtile } from "./copier";
 
 type Props = NodeViewRendererProps;
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, attrs: Record<string, string> = {}): HTMLElementTagNameMap[K] => {
@@ -38,7 +40,9 @@ export function vueEncadre() {
     const tete = el("div", "carnet-encadre__tete", { contenteditable: "false" });
     const bouton = el("button", "carnet-encadre__genre", { type: "button", title: "Changer le type d'encadré" });
     const titre = el("input", "carnet-encadre__titre", { placeholder: "Titre (facultatif)", "aria-label": "Titre de l'encadré", spellcheck: "true" });
-    tete.append(bouton, titre);
+    // lot 6 : copier le contenu (sans « > » ni la ligne « [!NOTE] titre » : le titre n'est pas copié)
+    const copier = boutonCopier("carnet-encadre__copier", "Copier le contenu de l'encadré", () => texteUtile(node, editor));
+    tete.append(bouton, titre, copier);
     const contenu = el("div", "carnet-encadre__contenu");
     dom.append(tete, contenu);
 
@@ -49,6 +53,7 @@ export function vueEncadre() {
       (bouton.lastChild as HTMLElement).textContent = LIBELLES_ENCADRE[g] ?? g;
       if (document.activeElement !== titre) titre.value = String(node.attrs.titre ?? "");
       titre.style.display = editor.isEditable || node.attrs.titre ? "" : "none";
+      titre.readOnly = !editor.isEditable;
     };
     rendre();
     const poser = (attrs: Record<string, unknown>) => {
@@ -62,7 +67,19 @@ export function vueEncadre() {
       const i = GENRES.indexOf(String(node.attrs.genre) as never);
       poser({ genre: GENRES[(i + 1) % GENRES.length] });
     });
-    titre.addEventListener("input", () => poser({ titre: titre.value.replace(/\n/g, " ") }));
+    // page verrouillée : le titre de l'encadré ne se modifie pas (état relu au moment du geste, et à chaque
+    // `setEditable`, qui émet « update »)
+    titre.addEventListener("focus", () => { titre.readOnly = !editor.isEditable; });
+    const majModifiable = () => {
+      if (editor.isDestroyed) return;
+      titre.readOnly = !editor.isEditable;
+      titre.style.display = editor.isEditable || node.attrs.titre ? "" : "none";
+    };
+    editor.on("update", majModifiable);
+    titre.addEventListener("input", () => {
+      if (!editor.isEditable) { titre.value = String(node.attrs.titre ?? ""); return; }
+      poser({ titre: titre.value.replace(/\n/g, " ") });
+    });
     titre.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === "ArrowDown") {
         e.preventDefault();
@@ -83,6 +100,33 @@ export function vueEncadre() {
       },
       stopEvent: (e: Event) => tete.contains(e.target as Node),
       ignoreMutation: (m: { type: string; target: Node }) => m.type !== "selection" && (tete.contains(m.target) || m.target === dom),
+      destroy: () => { editor.off("update", majModifiable); },
+    };
+  };
+}
+
+// ------------------------------------------------------------------------------------------------ citation
+
+/** Citation (lot 6) : le bloc standard, plus un bouton « Copier » (élément d'interface, hors du document). */
+export function vueCitation() {
+  return (p: Props) => {
+    let node = p.node;
+    const { editor } = p;
+    const dom = el("blockquote", "carnet-citation");
+    const contenu = el("div", "carnet-citation__contenu");
+    const outils = el("div", "carnet-citation__outils", { contenteditable: "false" });
+    outils.append(boutonCopier("carnet-citation__copier", "Copier la citation", () => texteUtile(node, editor)));
+    dom.append(contenu, outils);
+    return {
+      dom,
+      contentDOM: contenu,
+      update: (n: PMNode) => {
+        if (n.type !== node.type) return false;
+        node = n;
+        return true;
+      },
+      stopEvent: (e: Event) => outils.contains(e.target as Node),
+      ignoreMutation: (m: { type: string; target: Node }) => m.type !== "selection" && (outils.contains(m.target) || m.target === dom),
     };
   };
 }
@@ -120,8 +164,9 @@ export function decomposer(valeur: string): { cible: string; alias: string | nul
 
 export function vueWikilien(contexte: ContexteEditeur) {
   const libelle = (valeur: string): string => {
-    const { cible, alias } = decomposer(valeur);
+    const { cible, alias, ancre } = decomposer(valeur);
     if (alias) return alias;
+    if (!cible && ancre) return ancre; // [[#Titre]] : un titre de la page ouverte
     const t = contexte.titreDe(cible);
     if (t) return t;
     const d = libelleDate(cible);
@@ -135,11 +180,13 @@ export function vueWikilien(contexte: ContexteEditeur) {
     dom.contentEditable = "false";
     dom.draggable = false;
     const rendre = () => {
-      const { cible } = decomposer(node.attrs.valeur);
-      const connue = contexte.titreDe(cible) != null;
+      const { cible, ancre } = decomposer(node.attrs.valeur);
+      const connue = cible ? contexte.titreDe(cible) != null : Boolean(ancre);
       const date = !connue && RE_DATE.test(cible);
       dom.setAttribute("data-wikilien", node.attrs.valeur);
-      dom.href = "/p/" + cible.split("/").map(encodeURIComponent).join("/");
+      // [[Page#Titre]] (#5) : l'ancre est portée par l'adresse, la page y défile une fois ouverte
+      const diese = ancre ? "#" + encodeURIComponent(ancre) : "";
+      dom.href = cible ? "/p/" + cible.split("/").map(encodeURIComponent).join("/") + diese : diese || "#";
       dom.classList.toggle("carnet-wikilien--inconnue", !connue && !date);
       dom.classList.toggle("carnet-wikilien--date", date);
       dom.title = connue ? `Ouvrir « ${libelle(node.attrs.valeur)} »` : date ? `Journal du ${cible}` : `Page introuvable : ${cible}`;
@@ -150,7 +197,8 @@ export function vueWikilien(contexte: ContexteEditeur) {
     dom.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      contexte.ouvrirPage(decomposer(node.attrs.valeur).cible);
+      const { cible, ancre } = decomposer(node.attrs.valeur);
+      contexte.ouvrirPage(cible, ancre);
     });
     return {
       dom,
@@ -275,11 +323,13 @@ export function vueImageBloc(contexte: ContexteEditeur, choisirFichier: (pos: nu
     const cadre = el("div", "carnet-image__cadre", { contenteditable: "false" });
     const img = el("img", "carnet-image__img", { draggable: "false", loading: "lazy", decoding: "async" });
     const outils = el("div", "carnet-image__outils", { contenteditable: "false" });
+    const bAgrandir = el("button", "carnet-image__outil", { type: "button", title: "Voir en grand", "aria-label": "Voir l'image en grand" });
+    bAgrandir.innerHTML = icDivers.pleinEcran;
     const bRemplacer = el("button", "carnet-image__outil", { type: "button", title: "Remplacer l'image", "aria-label": "Remplacer l'image" });
     bRemplacer.innerHTML = ic.remplacer;
     const bSuppr = el("button", "carnet-image__outil", { type: "button", title: "Supprimer l'image", "aria-label": "Supprimer l'image" });
     bSuppr.innerHTML = ic.corbeille;
-    outils.append(bRemplacer, bSuppr);
+    outils.append(bAgrandir, bRemplacer, bSuppr);
     const attente = el("div", "carnet-image__attente");
     cadre.append(img, attente, outils);
     const legende = el("input", "carnet-image__legende", { placeholder: "Ajouter une légende", "aria-label": "Légende de l'image", spellcheck: "true" });
@@ -316,7 +366,11 @@ export function vueImageBloc(contexte: ContexteEditeur, choisirFichier: (pos: nu
       if (pos == null) return;
       editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, ...attrs }));
     };
-    legende.addEventListener("input", () => poser({ alt: legende.value.replace(/\n/g, " ") }));
+    legende.addEventListener("focus", () => { legende.readOnly = !editor.isEditable; });
+    legende.addEventListener("input", () => {
+      if (!editor.isEditable) { legende.value = String(node.attrs.alt ?? ""); return; }
+      poser({ alt: legende.value.replace(/\n/g, " ") });
+    });
     legende.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -326,18 +380,73 @@ export function vueImageBloc(contexte: ContexteEditeur, choisirFichier: (pos: nu
         editor.chain().focus().insertContentAt(apres, { type: "paragraph" }).setTextSelection(apres + 1).run();
       }
     });
-    bRemplacer.addEventListener("click", (e) => { e.preventDefault(); const pos = posDe(p); if (pos != null) choisirFichier(pos); });
+    bRemplacer.addEventListener("click", (e) => { e.preventDefault(); if (!editor.isEditable) return; const pos = posDe(p); if (pos != null) choisirFichier(pos); });
     bSuppr.addEventListener("click", (e) => {
       e.preventDefault();
+      if (!editor.isEditable) return;
       const pos = posDe(p);
       if (pos == null) return;
       editor.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
     });
+    // #12 : voir l'image en grand. Ordinateur : un clic la sélectionne ET l'ouvre (fermée, elle reste sélectionnée et
+    // le focus revient à l'éditeur). Au doigt : le premier toucher sélectionne le bloc, un toucher sur l'image déjà
+    // sélectionnée l'ouvre (ou le bouton « Voir en grand »). Page en lecture seule : un clic ou un toucher l'ouvre.
+    const voir = () => {
+      if (dom.dataset.etat !== "pret") return;
+      ouvrirVisionneuse(img.currentSrc || img.src, String(node.attrs.alt ?? ""), () => { if (!editor.isDestroyed) editor.view.focus(); });
+    };
+    bAgrandir.addEventListener("click", (e) => { e.preventDefault(); voir(); });
+    // sélection AVANT le geste (ProseMirror sélectionne lui-même le bloc au relâchement, avant notre « click »)
+    let etaitSelectionnee = false;
+    // sélectionnée par un geste de la personne (à l'ouverture, une page qui commence par une image la « sélectionne »
+    // sans que rien ne soit visible : un toucher ne doit pas alors l'ouvrir d'emblée)
+    let choisie = false;
+    // Finale V3 (recette v3-corrections « iphone-image », instable) : au premier toucher, l'éditeur prend le focus et le
+    // navigateur pose PLUS TARD (≈ 300 ms, événement selectionchange) un curseur dans le texte voisin ; ProseMirror le
+    // reprend et la sélection du bloc saute : le second toucher re-sélectionnait au lieu d'ouvrir. Le bloc choisi au
+    // doigt reste donc sélectionné tant qu'aucun autre geste n'a eu lieu (`garde`), et un second toucher sur la même
+    // image peu après le premier l'ouvre même si la sélection a sauté entre-temps (`choisieA`).
+    let choisieA = 0;
+    let garde: (() => void) | null = null;
+    const finGarde = () => { if (garde) { document.removeEventListener("selectionchange", garde); garde = null; } };
+    const garderSelection = () => {
+      finGarde();
+      const jusqua = Date.now() + 900;
+      const g = () => {
+        if (Date.now() > jusqua || editor.isDestroyed) { finGarde(); return; }
+        window.setTimeout(() => {
+          if (garde !== g || editor.isDestroyed) return;
+          const q = posDe(p);
+          const s2 = editor.state.selection;
+          if (q != null && !(s2 instanceof NodeSelection && s2.from === q)) editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, q)));
+        }, 0);
+      };
+      garde = g;
+      document.addEventListener("selectionchange", g);
+      window.setTimeout(() => { if (garde === g) finGarde(); }, 950);
+    };
+    // tout autre geste (toucher ailleurs, clavier) met fin à la garde : on ne vole jamais un curseur posé par la personne
+    const autreGeste = (e: Event) => { if (garde && !(e.target instanceof Node && cadre.contains(e.target))) finGarde(); };
+    document.addEventListener("pointerdown", autreGeste, true);
+    document.addEventListener("keydown", autreGeste, true);
+    cadre.addEventListener("pointerdown", () => {
+      const pos = posDe(p);
+      const sel = editor.state.selection;
+      const recente = Date.now() - choisieA < 1500;
+      etaitSelectionnee = pos != null && ((sel instanceof NodeSelection && sel.from === pos && (choisie || editor.view.hasFocus())) || recente);
+    }, true);
     cadre.addEventListener("click", (e) => {
       if ((e.target as Element).closest("button")) return;
       const pos = posDe(p);
       if (pos == null) return;
-      editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+      const doigt = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+      if (!editor.isEditable) { voir(); return; }
+      const sel = editor.state.selection;
+      if (!(sel instanceof NodeSelection && sel.from === pos)) editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+      choisie = true;
+      if (!doigt || etaitSelectionnee) { choisieA = 0; finGarde(); voir(); return; }
+      choisieA = Date.now();
+      garderSelection();
     });
 
     return {
@@ -349,9 +458,14 @@ export function vueImageBloc(contexte: ContexteEditeur, choisirFichier: (pos: nu
         return true;
       },
       selectNode: () => dom.classList.add("est-selectionne"),
-      deselectNode: () => dom.classList.remove("est-selectionne"),
+      deselectNode: () => { dom.classList.remove("est-selectionne"); choisie = false; },
       stopEvent: (e: Event) => lg.contains(e.target as Node) || outils.contains(e.target as Node) || ((e.target as Element)?.closest?.(".carnet-image__envoyer") != null),
       ignoreMutation: () => true,
+      destroy: () => {
+        finGarde();
+        document.removeEventListener("pointerdown", autreGeste, true);
+        document.removeEventListener("keydown", autreGeste, true);
+      },
     };
   };
 }
@@ -497,7 +611,21 @@ export function vueContenuRepliable() {
 // ------------------------------------------------------------------------------------------------ blocs de code
 
 const hauteursApercu = new Map<string, number>();
-const vuesCode = new Set<{ verifierSelection: () => void }>();
+const vuesCode = new Set<{ verifierSelection: () => void; appliquerRetour: () => void }>();
+
+// #8 : retour à la ligne des blocs de code, choix d'affichage retenu dans le navigateur (jamais dans le fichier).
+const CLE_RETOUR = "carnet:code-retour";
+/** Choix gardé en mémoire quand le stockage du navigateur est indisponible (navigation privée). */
+let retourMemoire: boolean | null = null;
+function retourActif(): boolean {
+  if (retourMemoire !== null) return retourMemoire;
+  try { return localStorage.getItem(CLE_RETOUR) === "1"; } catch { return false; }
+}
+function basculerRetourALaLigne(): void {
+  const v = !retourActif();
+  try { localStorage.setItem(CLE_RETOUR, v ? "1" : "0"); retourMemoire = null; } catch { retourMemoire = v; }
+  for (const x of vuesCode) x.appliquerRetour();
+}
 
 export function surSelectionCode(): void {
   for (const v of vuesCode) v.verifierSelection();
@@ -512,9 +640,20 @@ export function vueCode(contexte: ContexteEditeur, magasin: Magasin) {
     const bLangue = el("button", "carnet-code__langue", { type: "button", title: "Choisir le langage" });
     const espace = el("span", "carnet-code__espace");
     const bBascule = el("button", "carnet-code__bouton", { type: "button" });
-    const bCopier = el("button", "carnet-code__bouton", { type: "button", title: "Copier le code" });
-    bCopier.innerHTML = `${ic.copier}<span>Copier</span>`;
-    tete.append(bLangue, espace, bBascule, bCopier);
+    const bRetour = el("button", "carnet-code__bouton carnet-code__retour", { type: "button", title: "Retour à la ligne (affichage seulement)" });
+    bRetour.innerHTML = `${icDivers.retourLigne}<span>Retour à la ligne</span>`;
+    // lot 6 : contenu exact du bloc (sans clôtures ni langage), repli execCommand (adresse Tailscale en http)
+    const bCopier = boutonCopier("carnet-code__bouton carnet-code__copier", "Copier le code", () => texteUtile(node), (m) => contexte.notifier?.(m));
+    tete.append(bLangue, espace, bBascule, bRetour, bCopier);
+    const appliquerRetour = () => {
+      const v = retourActif();
+      dom.classList.toggle("carnet-code--retour", v);
+      bRetour.setAttribute("aria-pressed", String(v));
+      bRetour.setAttribute("aria-label", v ? "Retour à la ligne : activé" : "Retour à la ligne : désactivé");
+    };
+    appliquerRetour();
+    bRetour.addEventListener("mousedown", (e) => e.preventDefault());
+    bRetour.addEventListener("click", (e) => { e.preventDefault(); basculerRetourALaLigne(); });
     const pre = el("pre", "carnet-code__pre", { spellcheck: "false" });
     const code = el("code");
     pre.append(code);
@@ -647,17 +786,9 @@ export function vueCode(contexte: ContexteEditeur, magasin: Magasin) {
         if (pos != null && editor.isEditable) editor.chain().focus().setTextSelection(pos + 1 + node.content.size).run();
       }
     });
-    bCopier.addEventListener("mousedown", (e) => e.preventDefault());
-    bCopier.addEventListener("click", async (e) => {
-      e.preventDefault();
-      try {
-        await navigator.clipboard.writeText(node.textContent);
-        bCopier.innerHTML = `${ic.valider}<span>Copié</span>`;
-        window.setTimeout(() => { bCopier.innerHTML = `${ic.copier}<span>Copier</span>`; }, 1500);
-      } catch { magasin.editeur && contexte.notifier?.("Copie impossible dans ce navigateur"); }
-    });
 
     const moi = {
+      appliquerRetour,
       verifierSelection: () => {
         if (!typeApercu(node.attrs.language)) return;
         const pos = posDe(p);

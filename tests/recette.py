@@ -376,9 +376,11 @@ def parcours_fonctionnel(nav):
     except Exception as e:  # noqa
         etape("recherche sans accents puis ouverture", False, e)
 
-    # 11. Accueil : tâches ouvertes et « À relire »
+    # 11. Accueil (V3 : écran Aujourd'hui) : tâches ouvertes et « À relire » ; les tâches sans date sont repliées
     ouvrir(page, "/")
     page.wait_for_timeout(800)
+    if page.locator("#titre-sans-date button[aria-expanded='false']").count():
+        page.click("#titre-sans-date button")
     etape("accueil : tâche d'une autre page listée", page.locator(".tache__libelle", has_text="Appeler Lou").count() >= 1)
     capture(page, "iphone-clair-accueil")
     ctx.close()
@@ -409,6 +411,11 @@ def parcours_bureau(nav):
     page.wait_for_timeout(400)  # l'arbre se défile sur la page ouverte (chantier navigation) : on attend qu'il soit posé
     src = page.locator(".barre .rangee", has_text="À ranger").first
     dst = page.locator(".barre .rangee", has_text="Projet témoin").last
+    # V3 (fusion vague 2) : la barre latérale s'est allongée (Journal du jour, dossier Modèles/) : la ligne cible était
+    # sous le pied de la barre (Corbeille), hors de la zone visible de l'arbre, et le dépôt tombait sur le pied.
+    # On amène la cible au milieu de l'arbre : la source (juste au-dessus) reste visible.
+    dst.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    page.wait_for_timeout(200)
     try:
         src.drag_to(dst)
         # Laisser le navigateur traiter le dépôt (Chromium piloté : sans cette attente, la requête partait parfois
@@ -574,7 +581,10 @@ def main():
                and "tailscale-user-" not in e.lower()
                # WebKit signale ainsi une requête de même origine annulée par une navigation du test (page.goto)
                and not ("due to access control checks" in e and (BASE.split("://", 1)[-1] + "/") in e)
-               and not ("Failed to load resource: net::ERR_FAILED" in e and not PROXY)]
+               and not ("Failed to load resource: net::ERR_FAILED" in e and not PROXY)
+               # Finale V3 : le parcours PROVOQUE un conflit (écriture externe pendant la saisie) ; selon l'ordre d'arrivée,
+               # Carnet l'apprend par le flux en direct ou par la réponse 412 de son envoi (même bandeau) : 412 attendu
+               and "status of 412 (Precondition Failed)" not in e]
     etape("console sans erreur", not filtres, " | ".join(filtres[:6]))
     etape(f"aucune requête externe (seulement {BASE} et {ART})", not requetes_externes, " | ".join(requetes_externes[:6]))
     reste = [str(x) for x in (ESPACE / "Recette", ESPACE / "Recette.md") if x.exists()]

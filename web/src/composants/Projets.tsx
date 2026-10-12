@@ -16,6 +16,15 @@ import { plier, dossierDe } from "../../../shared/page.ts";
 const ORDRE = ["à faire", "en cours", "à relire", "en pause", "terminé"];
 const fmtDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
 
+/** Couleur de la pastille de priorité (#4) ; une valeur inconnue garde la pastille neutre et son texte tel quel. */
+export function tonPriorite(p: string | undefined | null): string {
+  const s = plier(p ?? "").trim();
+  if (/^(haute|elevee|forte|urgente?|critique|p0|p1|1)$/.test(s)) return "rouge";
+  if (/^(moyenne|normale|p2|2)$/.test(s)) return "ambre";
+  if (/^(basse|faible|p3|3)$/.test(s)) return "bleu";
+  return "gris";
+}
+
 function dateCourte(s?: string): string {
   if (!s) return "";
   const d = new Date(s);
@@ -70,6 +79,8 @@ export function Projets() {
   );
 
   const parent = (c: string) => app.index.get(dossierDe(c) + ".md")?.titre ?? dossierDe(c);
+  // #4 : le dossier parent n'apparaît sur les cartes que si elles viennent de plusieurs dossiers
+  const plusieursDossiers = useMemo(() => new Set((pages ?? []).map((p) => dossierDe(p.chemin))).size > 1, [pages]);
 
   return (
     <>
@@ -105,7 +116,7 @@ export function Projets() {
                     <td><Choix p={p} /></td>
                     <td>{dateCourte(p.meta.echeance)}</td>
                     <td>{p.meta.responsable ?? ""}</td>
-                    <td>{p.meta.priorite ?? ""}</td>
+                    <td>{p.meta.priorite ? <span className="pastille" data-ton={tonPriorite(p.meta.priorite)}>{p.meta.priorite}</span> : ""}</td>
                   </tr>
                 ))}
               </tbody>
@@ -139,8 +150,8 @@ export function Projets() {
                       <div className="carte-projet__meta">
                         {p.meta.echeance && <span>⏱ {dateCourte(p.meta.echeance)}</span>}
                         {p.meta.responsable && <span>{p.meta.responsable}</span>}
-                        {p.meta.priorite && <span>priorité {p.meta.priorite}</span>}
-                        <span>{parent(p.chemin)}</span>
+                        {p.meta.priorite && <span className="pastille" data-ton={tonPriorite(p.meta.priorite)} title={`Priorité : ${p.meta.priorite}`}>{p.meta.priorite}</span>}
+                        {plusieursDossiers && <span>{parent(p.chemin)}</span>}
                       </div>
                       {tactile && <Choix p={p} />}
                     </div>

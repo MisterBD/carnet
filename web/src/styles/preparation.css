@@ -1,0 +1,772 @@
+/* Carnet · Dossier de rendez-vous (lot 11) : point d'entrée en tête de page, état d'une préparation conservée,
+   écran d'aperçu. iPhone d'abord (390 px) : cibles de 44 px, actions en bas d'écran ; jetons de jetons.css (clair/sombre). */
+
+/* ---------- Entrée « Préparer » en tête d'une fiche ---------- */
+
+.prep-entree {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e3);
+  margin: 2px 0 14px;
+}
+
+.prep-entree__bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--trait-fort);
+  background: var(--feuille);
+  color: var(--indigo);
+  font-weight: 650;
+  font-size: 15px;
+  text-decoration: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+@media (hover: hover) {
+  .prep-entree__bouton:hover {
+    background: var(--indigo-voile);
+    border-color: var(--indigo);
+  }
+}
+
+.prep-entree__bouton:active {
+  background: var(--appui);
+}
+
+@media (pointer: coarse) {
+  .prep-entree__bouton {
+    min-height: var(--cible);
+  }
+}
+
+.prep-entree__aide {
+  font-size: 13px;
+  color: var(--encre-3);
+  flex: 1 1 200px;
+}
+
+/* ---------- Préparation conservée : à jour / à rafraîchir ---------- */
+
+.prep-etat {
+  margin: 2px 0 16px;
+  font-size: 14px;
+  color: var(--encre-3);
+}
+
+.prep-etat[data-etat="a-jour"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prep-etat[data-etat="a-jour"]::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vert);
+}
+
+.prep-etat[data-etat="a-rafraichir"] {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--rayon);
+  background: var(--ambre-fond);
+  color: var(--ambre);
+}
+
+.prep-etat__titre {
+  margin: 0;
+  color: inherit;
+  font-size: 15px;
+}
+
+.prep-etat__note {
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.prep-etat__liste {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.prep-etat__liste a {
+  color: inherit;
+  font-weight: 600;
+}
+
+.prep-etat__bouton {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ambre);
+  background: var(--ambre);
+  color: var(--feuille);
+  font-weight: 650;
+  font-size: 15px;
+}
+
+@media (pointer: coarse) {
+  .prep-etat__bouton {
+    min-height: var(--cible);
+  }
+}
+
+/* ---------- Écran d'aperçu ---------- */
+
+.prep {
+  /* place pour la barre d'actions fixe en bas (iPhone) */
+  padding-bottom: calc(120px + var(--sa-bas));
+}
+
+.prep__tete {
+  margin: 6px 0 14px;
+}
+
+.prep__surtitre {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--indigo);
+}
+
+.prep__titre {
+  font-family: var(--police-titre);
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 650;
+  margin: 0 0 8px;
+  color: var(--encre);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .prep__titre {
+    font-size: 36px;
+  }
+}
+
+.prep__meta {
+  margin: 0;
+  font-size: 14px;
+  color: var(--encre-3);
+}
+
+.prep__meta {
+  font-size: 16px;
+  color: var(--encre-2);
+}
+
+.prep__aide {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--encre-3);
+}
+
+.prep__aide a {
+  color: inherit;
+}
+
+.prep-quand {
+  flex: none;
+  font-size: 13px;
+  color: var(--encre-3);
+  white-space: nowrap;
+}
+
+/* Couverture */
+
+.prep-couverture {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: var(--rayon);
+  background: var(--vert-fond);
+  color: var(--vert);
+}
+
+.prep-couverture[data-incomplet="true"] {
+  background: var(--ambre-fond);
+  color: var(--ambre);
+}
+
+.prep-couverture__ligne {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.prep-couverture__ligne > svg {
+  flex: none;
+}
+
+.prep-couverture__texte {
+  flex: 1 1 230px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.prep-couverture__detail {
+  flex: none;
+  margin-left: auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+@media (pointer: coarse) {
+  .prep-couverture__detail {
+    min-height: var(--cible);
+  }
+}
+
+.prep-sources {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.prep-sources ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.prep-sources__titre {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prep-sources__chemin {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--encre-3);
+  overflow-wrap: anywhere;
+}
+
+.prep-sources__ligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  font-size: 14px;
+}
+
+.prep-sources__ligne:last-child {
+  border-bottom: none;
+}
+
+.prep-sources__nom {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  color: var(--encre);
+}
+
+.prep-sources__nom a {
+  color: var(--encre);
+  font-weight: 600;
+}
+
+.prep-sources__brut {
+  font-family: var(--police-code);
+  font-size: 13px;
+  color: var(--encre-2);
+}
+
+.prep-sources .pastille {
+  flex: none;
+  white-space: normal;
+  height: auto;
+  min-height: 24px;
+  padding: 2px 10px;
+  text-align: right;
+}
+
+/* Bandeaux */
+
+.prep-bandeau {
+  margin-top: 0;
+}
+
+.prep-conservee {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: var(--rayon);
+  background: var(--indigo-voile);
+  color: var(--indigo);
+  font-size: 15px;
+}
+
+.prep-conservee p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prep-conservee a {
+  color: inherit;
+  font-weight: 650;
+}
+
+/* Sections repliables */
+
+.prep-section {
+  margin: 0 0 8px;
+  border-top: 1px solid var(--trait);
+}
+
+.prep-section__titre {
+  margin: 0;
+  font-size: inherit;
+}
+
+.prep-section__titre button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--cible);
+  padding: 10px 2px;
+  border: none;
+  background: none;
+  color: var(--encre);
+  text-align: left;
+  font-family: var(--police-titre);
+  font-size: 20px;
+  font-weight: 650;
+  border-radius: 8px;
+}
+
+.prep-section__icone {
+  display: grid;
+  place-items: center;
+  color: var(--encre-3);
+}
+
+.prep-section__libelle {
+  flex: 1;
+}
+
+.prep-section__nombre {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--encre-2);
+  font-family: var(--police);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+
+.prep-section__chevron {
+  color: var(--encre-3);
+  transition: transform var(--transition);
+}
+
+.prep-section[data-replie="true"] .prep-section__chevron {
+  transform: rotate(-90deg);
+}
+
+.prep-section__corps {
+  padding: 2px 0 18px;
+}
+
+.prep-vide,
+.prep-plus {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--encre-3);
+}
+
+/* Cartes (décisions, notes) */
+
+.prep-carte {
+  background: var(--feuille);
+  border: 1px solid var(--trait);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.prep-carte__haut {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.prep-carte__titre {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--encre);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.prep-carte__titre svg {
+  flex: none;
+  color: var(--encre-3);
+}
+
+@media (hover: hover) {
+  .prep-carte__titre:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.prep-carte__quand {
+  flex: none;
+  font-size: 13px;
+  color: var(--encre-3);
+}
+
+.prep-carte__pastilles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.prep-carte__note {
+  font-size: 13px;
+  color: var(--encre-3);
+}
+
+.prep-extrait {
+  margin: 8px 0 6px;
+  padding-left: 12px;
+  border-left: 3px solid var(--trait-fort);
+  color: var(--encre-2);
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.prep-rev {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--encre-3);
+  white-space: nowrap;
+}
+
+.prep-rev code {
+  font-family: var(--police-code);
+  font-size: 12px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--encre-2);
+}
+
+/* Tâches */
+
+.prep-taches,
+.prep-livrables {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--feuille);
+  border: 1px solid var(--trait);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.prep-tache,
+.prep-livrable {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--trait);
+}
+
+.prep-tache:first-child,
+.prep-livrable:first-child {
+  border-top: none;
+}
+
+.prep-tache__case,
+.prep-livrable__icone {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  color: var(--encre-3);
+}
+
+.prep-livrable[data-etat="present"] .prep-livrable__icone {
+  color: var(--vert);
+}
+
+.prep-livrable[data-etat="absent"] .prep-livrable__icone {
+  color: var(--rouge);
+}
+
+.prep-tache__corps,
+.prep-livrable__corps {
+  flex: 1;
+  min-width: 0;
+}
+
+.prep-tache__texte,
+.prep-livrable__titre {
+  display: inline-block;
+  color: var(--encre);
+  font-size: 16px;
+  line-height: 1.4;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  padding: 1px 0;
+}
+
+a.prep-tache__texte,
+a.prep-livrable__titre {
+  /* zone de toucher plus haute sans changer la ligne */
+  padding: 10px 0;
+  margin: -10px 0;
+}
+
+@media (hover: hover) {
+  a.prep-tache__texte:hover,
+  a.prep-livrable__titre:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.prep-tache__meta,
+.prep-livrable__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 6px;
+}
+
+.prep-tache__meta .pastille,
+.prep-livrable__meta .pastille {
+  height: 22px;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.prep-provenance {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.prep-provenance__page,
+.prep-livrable__mission {
+  color: var(--encre-3);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.prep-provenance__page {
+  text-decoration: underline;
+  text-decoration-color: var(--trait-fort);
+  text-underline-offset: 3px;
+}
+
+.prep-livrable__mission a {
+  color: var(--encre-2);
+}
+
+/* Exemple de frontmatter (état vide) */
+
+.prep-exemple {
+  display: block;
+  margin: 10px auto 0;
+  padding: 10px 12px;
+  max-width: 360px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--police-code);
+  font-size: 13px;
+  text-align: left;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Actions : barre fixe en bas sur iPhone, en ligne sur ordinateur */
+
+.prep-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  padding: 10px max(16px, var(--sa-droite)) calc(10px + var(--sa-bas)) max(16px, var(--sa-gauche));
+  background: color-mix(in srgb, var(--fond) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--trait);
+}
+
+.prep-actions .bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  font-size: 16px;
+}
+
+@media (min-width: 900px) and (pointer: fine) {
+  .prep-actions .bouton {
+    height: 42px;
+    font-size: 15px;
+  }
+}
+
+.prep-actions .bouton:first-child {
+  flex: 0 0 auto;
+}
+
+.prep-actions .bouton--primaire {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* iPhone : « Régénérer » réduit à son icône (nom accessible gardé), le bouton principal garde son libellé entier */
+@media (max-width: 420px) {
+  .prep-actions__regenerer {
+    width: var(--cible);
+    min-width: var(--cible);
+    padding: 0 !important;
+  }
+  .prep-actions__libelle {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+.prep-actions .bouton:disabled {
+  opacity: 0.6;
+}
+
+@media (min-width: 900px) {
+  .prep {
+    padding-bottom: 120px;
+  }
+  /* ordinateur : barre collée au bas de la colonne de lecture, toujours à portée */
+  .prep-actions {
+    position: sticky;
+    left: auto;
+    right: auto;
+    bottom: 0;
+    justify-content: flex-end;
+    margin: 20px -12px 0;
+    padding: 12px 12px calc(12px + var(--sa-bas));
+    border-top: 1px solid var(--trait);
+    border-radius: 12px 12px 0 0;
+  }
+  .prep-actions .bouton--primaire {
+    flex: 0 0 auto;
+  }
+}
+
+/* les notifications passent au-dessus de la barre d'actions fixe (iPhone) */
+@media (max-width: 899.98px) {
+  body:has(.prep-actions) .toasts {
+    bottom: calc(76px + var(--sa-bas));
+  }
+}
+
+.prep-tourne {
+  animation: prep-tourne 0.9s linear infinite;
+}
+
+@keyframes prep-tourne {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prep-tourne {
+    animation: none;
+  }
+}
+
+@media print {
+  .prep-actions,
+  .prep-couverture__detail {
+    display: none;
+  }
+}
+
+/* Intégration lots 1 et 11 : sur iPhone, la barre d'actions se pose AU-DESSUS de la barre d'onglets du lot 1
+   (--haut-onglets n'est défini que lorsque cette barre est visible ; elle porte déjà la marge de sécurité du bas). */
+@media (max-width: 899.98px) {
+  :root:has(.onglets-bas:not([data-cachee="true"])) .prep-actions {
+    bottom: var(--haut-onglets);
+    padding-bottom: 10px;
+  }
+  :root:has(.onglets-bas:not([data-cachee="true"])) .prep {
+    padding-bottom: calc(120px + var(--haut-onglets));
+  }
+}
+
+/* K10-03 (finale V3) : préparation conservée : date de la photographie sous le titre, avant l'état et « Sources et
+   traçabilité » (replié) */
+.prep-date {
+  margin: 2px 0 8px;
+  color: var(--encre-2);
+  font-size: 15px;
+}
+.prep-date::first-letter { text-transform: uppercase; }

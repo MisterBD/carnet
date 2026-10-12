@@ -267,12 +267,31 @@ function blocsMd(parent: PMNode, racine = false): MNode[] {
   return res;
 }
 
+/**
+ * Espaces en fin de paragraphe ou de titre : invisibles en Markdown, la sérialisation les écrivait « &#x20; » (bruit
+ * dans les fichiers des agents ; ligne réelle « [[Page]][[Page]]&#x20; » après un lien inséré suivi d'une espace,
+ * lot 4 / K2-03). Ils ne sont plus écrits.
+ */
+function sansEspaceFinal(enfants: MNode[]): MNode[] {
+  const d = enfants[enfants.length - 1];
+  // sans expression /[ \t]+$/ (quadratique sur une longue suite d'espaces) : même résultat, temps linéaire
+  const brut = d?.type === "text" ? (d.value ?? "") : "";
+  let n = brut.length;
+  while (n > 0 && (brut[n - 1] === " " || brut[n - 1] === "\t")) n--;
+  if (d?.type === "text" && n < brut.length) {
+    const v = brut.slice(0, n);
+    if (v) d.value = v;
+    else if (enfants.length > 1) enfants.pop();
+  }
+  return enfants;
+}
+
 export function blocMd(n: PMNode): MNode | null {
   switch (n.type.name) {
     case "paragraph":
-      return { type: "paragraph", children: enLigneMd(n) };
+      return { type: "paragraph", children: sansEspaceFinal(enLigneMd(n)) };
     case "heading":
-      return { type: "heading", depth: n.attrs.level, children: enLigneMd(n), data: { setext: n.attrs.setext } };
+      return { type: "heading", depth: n.attrs.level, children: sansEspaceFinal(enLigneMd(n)), data: { setext: n.attrs.setext } };
     case "horizontalRule":
       return { type: "thematicBreak", data: { brut: n.attrs.brut } };
     case "blockquote":
@@ -368,10 +387,11 @@ export function enLigneMd(parent: PMNode): MNode[] {
       if (ATTENTION.has(n.type)) {
         const d = n.children![n.children!.length - 1];
         if (d?.type === "text") {
-          const m = /\s+$/.exec(d.value ?? "");
-          if (m && m[0].length < (d.value ?? "").length) {
-            d.value = d.value!.slice(0, -m[0].length);
-            ajouterTexte(courant(), m[0]);
+          const v = d.value ?? "";
+          const fin = v.length - v.trimEnd().length; // = /\s+$/ (mêmes blancs que trimEnd), en temps linéaire
+          if (fin > 0 && fin < v.length) {
+            d.value = v.slice(0, v.length - fin);
+            ajouterTexte(courant(), v.slice(v.length - fin));
           }
         }
       }

@@ -31,7 +31,7 @@ flowchart LR
   ]},
   "mark": {"type": "bar", "cornerRadiusEnd": 4},
   "encoding": {
-    "x": {"field": "mois", "type": "ordinal", "sort": null, "title": null},
+    "x": {"field": "mois", "type": "ordinal", "sort": null, "title": null, "axis": {"labelAngle": 0}},
     "y": {"field": "velos", "type": "quantitative", "title": "Vélos réparés"}
   }
 }
@@ -48,7 +48,7 @@ flowchart LR
   ]},
   "mark": {"type": "line", "point": true},
   "encoding": {
-    "x": {"field": "semaine", "type": "ordinal", "title": "Semaine"},
+    "x": {"field": "semaine", "type": "ordinal", "title": "Semaine", "axis": {"labelAngle": 0}},
     "y": {"field": "taux", "type": "quantitative", "title": "Réussite au premier coup (%)", "scale": {"domain": [50, 100]}}
   }
 }
@@ -56,5 +56,6 @@ flowchart LR
 
 > [!NOTE]
 > Pas d'expression ni de code dans le JSON Vega-Lite : des valeurs, des champs, des marques. Les données sont dans le bloc (`data.values`), jamais chargées depuis Internet.
+> Axe X en catégories (mois, semaines, noms) : `"axis": {"labelAngle": 0}` garde les étiquettes à l'horizontale, sinon Vega-Lite les tourne de 90°.
 
 Suite de la visite : [[Visite guidée/Tâches et mentions]].

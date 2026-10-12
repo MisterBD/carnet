@@ -14,9 +14,10 @@ Ce qu'il faut retenir : **chaque page est un simple fichier `.md`** dans un doss
 
 - [[Visite guidée]] : encadrés, tableaux, schémas, graphiques, tâches, artefacts. Cinq minutes, un café.
 - [[Projets]] : les chantiers de l'atelier, en tableau et en kanban (menu **Projets**).
-- [[To-do]] : une liste de tâches. Les cases se cochent aussi depuis l'écran **Accueil**.
+- [[To-do]] : une liste de tâches. Les cases se cochent aussi depuis l'écran **Aujourd'hui**.
 - [[Réunions]] : les comptes rendus, dont un « à relire ».
 - [[Écrire pour Carnet]] : la page à donner à ton agent IA pour qu'il écrive au bon format.
+- [[Visite guidée/Nouveautés V3]] : la base [[Partenaires — Prospects]] et sa vue « À relancer », la Boîte, le [[Journal]], les modèles, les missions et une décision qui attend ta réponse.
 
 > [!TIP] Essaie tout de suite
 > Ouvre n'importe quelle page, appuie sur `/` au début d'une ligne et choisis **Sous-page**. La page est créée, liée, et elle apparaît dans l'arbre à gauche. Sur téléphone, l'arbre est dans le tiroir en haut à gauche.
@@ -29,7 +30,7 @@ Ce qu'il faut retenir : **chaque page est un simple fichier `.md`** dans un doss
 | Ranger mes pages | Je glisse une page dans l'arbre : avant, après, ou dessus pour en faire une sous-page |
 | Retrouver quelque chose | Je cherche (⌘K ou Ctrl K) : titres et contenus, sans se soucier des accents |
 | Suivre mes projets | J'ouvre **Projets** et je change un statut d'un geste |
-| Faire relire un texte à un humain | J'écris `statut: à relire` en tête de page, la page remonte sur l'Accueil |
+| Faire relire un texte à un humain | J'écris `statut: à relire` en tête de page, la page remonte sur **Aujourd'hui** |
 | Retrouver la version d'hier | Menu **…** de la page, puis **Historique des versions** |
 | Rattraper une suppression | J'ouvre la **Corbeille** en bas de l'arbre : une page supprimée y reste 30 jours |
 

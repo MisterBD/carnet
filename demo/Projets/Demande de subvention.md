@@ -31,4 +31,4 @@ Yasmine a rédigé le dossier. Il reste une relecture avant l'envoi du 20 octobr
 - [ ] Lettre de motivation (une page, pas trois)
 - [ ] Attestation d'assurance
 
-Une page « à relire » remonte sur l'écran **Accueil**, rubrique **À relire**, grâce au `statut: à relire` du frontmatter.
+Une page « à relire » remonte sur l'écran **Aujourd'hui**, rubrique **À relire**, grâce au `statut: à relire` du frontmatter.

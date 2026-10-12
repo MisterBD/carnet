@@ -15,12 +15,17 @@ import { ecrireAtomique, lstatOuNull } from "./disque.ts";
 import { ErreurHttp, journal } from "./http.ts";
 
 export const RE_HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
-export const RE_INSTANTANE = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{3})(-auto)?$/;
+/** Nom d'un instantané : horodatage local, puis « -auto » (pris juste avant une restauration), « -seance » (version
+ * automatique au début d'une séance d'écriture) ou « -ecrasee » (version externe écrasée par « Garder la mienne »),
+ * sans suffixe s'il a été pris à la main. */
+export const RE_INSTANTANE = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{3})(-auto|-seance|-ecrasee|-retour)?$/;
 const MAX_SIMULTANES = 2;
 const DELAI_MS = 5000;
 const MAX_SORTIE = 10 * 1024 * 1024;
 const CACHE_MS = 10_000;
 const MAX_INSTANTANES = 100;
+/** Plafond des versions automatiques de séance par page (les plus anciennes partent d'abord). */
+export const MAX_SEANCES = 30;
 
 export interface CommitPage {
   hash: string;
@@ -202,11 +207,24 @@ export class Git {
 // (`<CARNET_ETAT>/instantanes/<espace>/<chemin de la page>/<AAAAMMJJ-HHMMSS-mmm>[-auto].md`).
 // ---------------------------------------------------------------------------------------------
 
+/** « avant-retour » (lot 5) : version annulée par « Revenir à la version marquée vue » (Nouveautés), suffixe « -retour ». */
+export type GenreInstantane = "manuel" | "avant-restauration" | "seance" | "ecrasee" | "avant-retour";
+
 export interface Instantane {
   id: string;
   stamp: string;
   date: number;
+  /** Pris juste avant une restauration (compatibilité : `genre` dit la même chose et plus). */
   auto: boolean;
+  /** Version externe écrasée par « Garder la mienne ». */
+  ecrasee: boolean;
+  genre: GenreInstantane;
+}
+
+const SUFFIXES: Record<GenreInstantane, string> = { manuel: "", "avant-restauration": "-auto", seance: "-seance", ecrasee: "-ecrasee", "avant-retour": "-retour" };
+
+function genreDe(suffixe: string | undefined): GenreInstantane {
+  return suffixe === "-auto" ? "avant-restauration" : suffixe === "-seance" ? "seance" : suffixe === "-ecrasee" ? "ecrasee" : suffixe === "-retour" ? "avant-retour" : "manuel";
 }
 
 function dateDeStamp(m: RegExpExecArray): number {
@@ -245,7 +263,8 @@ export class Instantanes {
       const stamp = n.slice(0, -3);
       const m = RE_INSTANTANE.exec(stamp);
       if (!m) continue;
-      res.push({ id: `inst:${stamp}`, stamp, date: dateDeStamp(m), auto: Boolean(m[8]) });
+      const genre = genreDe(m[8]);
+      res.push({ id: `inst:${stamp}`, stamp, date: dateDeStamp(m), auto: genre === "avant-restauration", ecrasee: genre === "ecrasee", genre });
     }
     res.sort((a, b) => b.date - a.date || (a.stamp < b.stamp ? 1 : -1));
     return res;
@@ -265,10 +284,17 @@ export class Instantanes {
     }
   }
 
-  /** Prend un instantané ; s'il est identique au dernier, rien n'est écrit (identique: true). */
-  async creer(segs: string[], contenu: string, auto: boolean): Promise<Instantane & { identique: boolean }> {
+  /**
+   * Prend un instantané ; s'il est identique au dernier, rien n'est écrit (identique: true).
+   * `genre` : true = avant une restauration, false = à la main (forme historique), ou le genre explicite ;
+   * `marque: "ecrasee"` (socle) : version externe sur le point d'être écrasée (toujours écrite, même identique).
+   */
+  async creer(segs: string[], contenu: string, genreOuAuto: boolean | GenreInstantane, marque?: "ecrasee"): Promise<Instantane & { identique: boolean }> {
+    const genre: GenreInstantane = marque === "ecrasee" ? "ecrasee"
+      : genreOuAuto === true ? "avant-restauration" : genreOuAuto === false ? "manuel" : genreOuAuto;
     const existants = await this.lister(segs);
-    if (existants.length) {
+    // version écrasée ou annulée par un retour : toujours écrite (la preuve de ce qui a été retiré)
+    if (existants.length && genre !== "ecrasee" && genre !== "avant-retour") {
       const dernier = existants[0];
       try {
         const x = await this.lire(segs, dernier.stamp);
@@ -279,7 +305,7 @@ export class Instantanes {
     await fsp.mkdir(dossier, { recursive: true, mode: 0o700 });
     let t = Date.now();
     for (let k = 0; k < 50; k++, t++) {
-      const stamp = stampDe(new Date(t)) + (auto ? "-auto" : "");
+      const stamp = stampDe(new Date(t)) + SUFFIXES[genre];
       try {
         await ecrireAtomique(path.join(dossier, stamp + ".md"), contenu, { exclusif: true, mode: 0o600 });
       } catch (e) {
@@ -288,15 +314,38 @@ export class Instantanes {
       }
       const m = RE_INSTANTANE.exec(stamp)!;
       await this.#elaguer(segs);
-      return { id: `inst:${stamp}`, stamp, date: dateDeStamp(m), auto, identique: false };
+      return { id: `inst:${stamp}`, stamp, date: dateDeStamp(m), auto: genre === "avant-restauration", ecrasee: genre === "ecrasee", genre, identique: false };
     }
     throw new ErreurHttp(409, "Instantané impossible à nommer.", "conflit_nom");
   }
 
   async #elaguer(segs: string[]): Promise<void> {
-    const l = await this.lister(segs);
+    let l = await this.lister(segs);
+    // versions de séance : au plus MAX_SEANCES par page, les plus anciennes d'abord (les instantanés pris à la main
+    // et ceux d'avant restauration ne sont jamais chassés par des versions automatiques)
+    const seances = l.filter((x) => x.genre === "seance");
+    const enTrop = new Set(seances.slice(MAX_SEANCES).map((x) => x.stamp));
+    for (const st of enTrop) await fsp.unlink(path.join(this.#dossier(segs), st + ".md")).catch(() => {});
+    if (enTrop.size) l = l.filter((x) => !enTrop.has(x.stamp));
     for (const x of l.slice(MAX_INSTANTANES)) {
       await fsp.unlink(path.join(this.#dossier(segs), x.stamp + ".md")).catch(() => {});
+    }
+  }
+
+  /**
+   * Version automatique de séance : au PREMIER enregistrement par Carnet après une pause de travail sur la page (le
+   * fichier n'a pas été modifié depuis `pauseMs`), copie du contenu d'AVANT l'écriture. Dédoublonnée (identique au
+   * dernier instantané : rien), plafonnée (MAX_SEANCES). `pauseMs` ≤ 0 : désactivé. Une erreur n'empêche jamais
+   * l'écriture : elle est seulement journalisée. Renvoie l'instantané pris, ou null.
+   */
+  async seance(segs: string[], contenuAvant: string, mtimeMs: number, pauseMs: number, maintenant = Date.now()): Promise<Instantane | null> {
+    if (!(pauseMs > 0) || maintenant - mtimeMs < pauseMs) return null;
+    try {
+      const x = await this.creer(segs, contenuAvant, "seance");
+      return x.identique ? null : x;
+    } catch (e) {
+      journal({ niveau: "avertissement", quoi: "instantanes", erreur: String((e as Error).message).slice(0, 200) });
+      return null;
     }
   }
 
