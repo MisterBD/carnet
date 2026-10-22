@@ -34,7 +34,7 @@
     "@tiptap/extension-heading": "3.31.4",
     "@tiptap/extension-highlight": "3.31.4",
     "@tiptap/extension-horizontal-rule": "3.31.4",
-    "@tiptap/extension-italic": "3.31.4",
+    "@tiptap/extension-italic": "3.32.0",
     "@tiptap/extension-link": "3.31.4",
     "@tiptap/extension-list": "3.31.4",
     "@tiptap/extension-paragraph": "3.31.4",
