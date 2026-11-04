@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rendu Mermaid</title>
+<meta name="description" content="Page de rendu isolée : reçoit {type:'mermaid', spec} par postMessage et dessine le diagramme.">
+<link rel="stylesheet" href="/kit/fonts/fonts.css?v={{KIT_V}}">
+<style>
+  :root { color-scheme: light; }
+  :root[data-theme="sombre"] { color-scheme: dark; }
+  html, body { margin: 0; background: transparent; }
+  body { font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; padding: 8px; color: #1d1d1f; }
+  :root[data-theme="sombre"] body { color: #e8e8ea; }
+  #sortie { text-align: center; }
+  #sortie svg { max-width: 100%; height: auto; }
+  #erreur { margin: 8px 0; padding: 10px 12px; border-radius: 6px; font: 13px/1.4 ui-monospace, monospace; white-space: pre-wrap;
+            background: #fdecea; color: #7a1c14; border: 1px solid #f5c2bd; }
+  :root[data-theme="sombre"] #erreur { background: #3a1b18; color: #ffb4a9; border-color: #6b2f28; }
+</style>
+</head>
+<body>
+<div id="sortie" role="img" aria-label="Diagramme"></div>
+<pre id="erreur" role="alert" hidden></pre>
+<script src="/kit/mermaid/mermaid.min.js?v={{KIT_V}}"></script>
+<script src="/kit/pont.js?v={{KIT_V}}"></script>
+<script>
+(function () {
+  'use strict';
+  var TYPE = 'mermaid';
+  var MAX_SPEC = 200000;
+  var hote = window.parent;
+  var derniere = null;
+  var compteur = 0;
+  var sortie = document.getElementById('sortie');
+  var erreur = document.getElementById('erreur');
+
+  function dire(msg) { NotesPont.envoyer(msg); }
+
+  // Largeur naturelle du dessin (Mermaid la pose en max-width sur le SVG), marges du corps comprises : l'hôte
+  // élargit le cadre et le fait défiler plutôt que de réduire un schéma large jusqu'à l'illisible (iPhone).
+  function annoncerLargeur() {
+    var svg = sortie.querySelector('svg');
+    if (!svg) return;
+    var w = parseFloat(svg.style.maxWidth) || 0;
+    if (!w && svg.viewBox && svg.viewBox.baseVal) w = svg.viewBox.baseVal.width;
+    if (w > 0 && isFinite(w)) dire({ type: 'rendu:largeur', w: Math.ceil(w) + 16 });
+  }
+
+  function configurer() {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',            // pas de HTML ni de liens actifs dans les libellés
+      theme: NotesPont.theme() === 'sombre' ? 'dark' : 'default',
+      fontFamily: 'Roboto, system-ui, sans-serif',
+      logLevel: 'fatal',
+      suppressErrorRendering: true
+    });
+  }
+
+  function montrerErreur(texte) {
+    sortie.textContent = '';
+    erreur.textContent = String(texte).slice(0, 600);
+    erreur.hidden = false;
+    dire({ type: 'rendu:erreur', message: String(texte).slice(0, 300) });
+    NotesPont.hauteur();
+  }
+
+  async function rendre() {
+    if (typeof derniere !== 'string') return;
+    erreur.hidden = true;
+    configurer();
+    var id = 'mmd' + (++compteur);
+    try {
+      var r = await mermaid.render(id, derniere);
+      if (id !== 'mmd' + compteur) return;   // un rendu plus récent a démarré
+      sortie.innerHTML = r.svg;            // SVG produit par Mermaid en mode strict (assaini par DOMPurify)
+      annoncerLargeur();
+      dire({ type: 'rendu:ok' });
+    } catch (e) {
+      var rest = document.getElementById('d' + id);
+      if (rest) rest.remove();
+      montrerErreur((e && e.message) || e);
+      return;
+    }
+    NotesPont.hauteur();
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.source !== hote) return;          // l'hôte n'est reconnu que par source, jamais par origin
+    var m = e.data;
+    if (!m || typeof m !== 'object') return;
+    if (m.type === TYPE) {
+      if (typeof m.spec !== 'string' || m.spec.length > MAX_SPEC) { montrerErreur('spec Mermaid invalide (texte requis, 200 Ko max)'); return; }
+      derniere = m.spec;
+      var t = (m.theme === 'clair' || m.theme === 'sombre') ? m.theme : null;
+      if (t && t !== NotesPont.theme()) NotesPont.definirTheme(t);   // le rappel surTheme relance rendre()
+      else rendre();
+    }
+  });
+  NotesPont.surTheme(function () { if (derniere !== null) rendre(); });
+
+  dire({ type: 'rendu:pret', rendu: TYPE });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+/* Carnet · jetons et socle. Encre sumi, papier neutre, accent indigo (ai-iro), la vague comme signature.
+   Polices locales (OFL) : Literata pour les titres, Atkinson Hyperlegible Next pour le texte. */
+
+@font-face {
+  font-family: "Literata";
+  src: url("/polices/literata-opsz.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Next";
+  src: url("/polices/atkinson-next.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Atkinson Next";
+  src: url("/polices/atkinson-next-italique.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --fond: #fbfbfa;
+  --barre: #f4f4f1;
+  --feuille: #ffffff;
+  --encre: #1c2129;
+  --encre-2: #4a5261;
+  --encre-3: #5a6270;   /* gris secondaire : 5,9:1 sur --fond, 5,3:1 sur --surface-2 (AA ; avant #7a8291 = 3,7:1) */
+  --trait: #e7e8e4;
+  --trait-fort: #d6d8d3;
+  --surface: #f3f4f1;
+  --surface-2: #eceeea;
+  --survol: rgba(28, 33, 41, 0.055);
+  --appui: rgba(28, 33, 41, 0.09);
+  --indigo: #2d4f86;
+  --indigo-fonce: #213c68;
+  --indigo-voile: #e9eef6;
+  --selection: #d6e1f1;
+  --sur-accent: #ffffff;
+  --voile-modal: rgba(18, 22, 28, 0.32);
+  --ombre-1: 0 1px 2px rgba(28, 33, 41, 0.05), 0 2px 8px rgba(28, 33, 41, 0.05);
+  --ombre-2: 0 2px 6px rgba(28, 33, 41, 0.06), 0 12px 32px rgba(28, 33, 41, 0.12);
+
+  --gris-fond: #eeefec;   --gris: #555c68;
+  --bleu-fond: #e6eef9;   --bleu: #2d4f86;
+  --ambre-fond: #fbf0dc;  --ambre: #8a5a0b;
+  --violet-fond: #efeaf7; --violet: #5e4594;
+  --vert-fond: #e3f1e8;   --vert: #2f6b48;
+  --rouge-fond: #fae6e4;  --rouge: #a23b33;
+
+  --police: "Atkinson Next", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --police-titre: "Literata", ui-serif, "New York", Georgia, serif;
+  --police-code: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --rayon: 10px;
+  --rayon-petit: 7px;
+  --largeur-barre: 288px;
+  --largeur-texte: 720px;
+  --haut-entete: 52px;
+  --sa-haut: env(safe-area-inset-top, 0px);
+  --sa-bas: env(safe-area-inset-bottom, 0px);
+  --sa-gauche: env(safe-area-inset-left, 0px);
+  --sa-droite: env(safe-area-inset-right, 0px);
+  /* Mouvement sobre : états 120 ms, entrées 150 ms au plus ; tout est coupé par prefers-reduced-motion (voir plus bas). */
+  --duree: 120ms;
+  --duree-entree: 150ms;
+  /* Repère visuel (bloc déposé, version restaurée) : un signal qui s'efface, pas une transition d'état. */
+  --duree-signal: 1.2s;
+  --courbe: cubic-bezier(0.2, 0, 0, 1);
+  --transition: var(--duree) var(--courbe);
+  /* Rythme vertical : échelle de 4 px, utilisée pour les espaces entre blocs de l'interface. */
+  --e1: 4px;  --e2: 8px;  --e3: 12px;  --e4: 16px;  --e5: 24px;  --e6: 32px;  --e7: 48px;
+  --cible: 44px;          /* taille minimale d'une zone tactile (Apple HIG, WCAG 2.5.5) */
+}
+
+/* Sombre automatique (réglage du système). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --fond: #12161c;
+    --barre: #161b22;
+    --feuille: #1a1f27;
+    --encre: #e5e8ec;
+    --encre-2: #b3bac5;
+    --encre-3: #8a93a1;
+    --trait: #252c36;
+    --trait-fort: #333b47;
+    --surface: #1c222b;
+    --surface-2: #232a34;
+    --survol: rgba(255, 255, 255, 0.06);
+    --appui: rgba(255, 255, 255, 0.1);
+    --indigo: #8fb2ea;
+    --indigo-fonce: #b7cdf2;
+    --indigo-voile: #1b2638;
+    --selection: #263955;
+    --sur-accent: #0f1620;
+    --voile-modal: rgba(0, 0, 0, 0.55);
+    --ombre-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+    --ombre-2: 0 2px 6px rgba(0, 0, 0, 0.35), 0 14px 36px rgba(0, 0, 0, 0.45);
+
+    --gris-fond: #232a34;   --gris: #b3bac5;
+    --bleu-fond: #1b2a42;   --bleu: #9dbcf0;
+    --ambre-fond: #3a2c12;  --ambre: #f0c37a;
+    --violet-fond: #2c2442; --violet: #c3b0ef;
+    --vert-fond: #173226;   --vert: #8fd3aa;
+    --rouge-fond: #3d1f1f;  --rouge: #f0a39b;
+  }
+}
+
+/* Contraste renforcé demandé au système : gris secondaire = gris courant, filets plus marqués. */
+@media (prefers-contrast: more) {
+  :root {
+    --encre-3: var(--encre-2);
+    --trait: var(--trait-fort);
+    --trait-fort: var(--encre-3);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Barres de défilement discrètes (bureau) : fines, de la couleur des filets. */
+@media (hover: hover) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--trait-fort) transparent;
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Le fond existe avant le premier rendu de React : pas de flash blanc en sombre, ni sous le rebond de défilement. */
+  background: var(--fond);
+  /* Un lien d'ancre ou un focus clavier ne se cache jamais sous l'en-tête collant. */
+  scroll-padding-top: calc(var(--haut-entete) + var(--sa-haut) + 12px);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fond);
+  color: var(--encre);
+  font-family: var(--police);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+#racine {
+  min-height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Tactile : pas de zoom au double toucher, pas de délai, pas de loupe sur les boutons. */
+a,
+button,
+input,
+select,
+textarea,
+label,
+summary,
+[role="button"],
+[role="checkbox"],
+[role="tab"] {
+  touch-action: manipulation;
+}
+
+button,
+[role="button"] {
+  -webkit-touch-callout: none;
+}
+
+a {
+  color: var(--indigo);
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* Focus clavier visible, jamais au toucher ni au clic. Le rayon n'est PAS forcé : l'anneau suit la forme du bouton. */
+:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* iPhone : iOS zoome la page au focus d'un champ dont le texte fait moins de 16 px. Règle de la maison : tout champ
+   (input, select, textarea, zone éditable) fait 16 px au minimum au toucher. tests/finition.py le vérifie champ par champ. */
+
+.masque-visuel {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Mouvement réduit : plus aucune animation ni transition (le squelette devient un aplat, la vague reste immobile). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Couleurs forcées (contraste élevé de Windows) : les boutons gardent un contour, les cartes aussi. */
+@media (forced-colors: active) {
+  .bouton,
+  .bouton-nouvelle,
+  .carte-relire,
+  .carte-projet,
+  .pastille-reseau button {
+    border: 1px solid ButtonText;
+  }
+}

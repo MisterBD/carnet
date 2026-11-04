@@ -1,0 +1,143 @@
+/* Carnet V3 · lot 6 « Pages » : bandeaux verrou / archive, groupe « Archives » de l'arbre, filtre de la recherche. */
+
+.bandeaux-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 14px;
+}
+
+.bandeau-page {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 10px 8px 12px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--trait);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.bandeau-page--verrou { background: var(--bleu-fond); color: var(--bleu); border-color: transparent; }
+.bandeau-page--archive { background: var(--gris-fond); color: var(--gris); border-color: transparent; }
+
+.bandeau-page > svg { flex: none; }
+
+.bandeau-page p {
+  margin: 0;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.bandeau-page button {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 600;
+  min-height: 40px;
+  font-size: 15px;
+}
+
+.bandeau-page button:disabled { opacity: 0.55; }
+.bandeau-page button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+@media (pointer: coarse), (max-width: 899px) {
+  .bandeau-page button { min-height: var(--cible, 44px); }
+}
+
+/* Éditeur d'une page verrouillée : pas de curseur d'insertion trompeur */
+.editeur[data-verrou="true"] .ProseMirror { caret-color: transparent; }
+
+/* Arbre : groupe replié « Archives » et cadenas des pages verrouillées */
+.arbre-archives {
+  margin-top: 6px;
+}
+
+.arbre-archives > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--encre-3);
+  font-size: 14px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.arbre-archives > summary::-webkit-details-marker { display: none; }
+.arbre-archives > summary:hover { background: var(--gris-fond); }
+.arbre-archives > summary:focus-visible { outline: 2px solid var(--bleu); outline-offset: -2px; }
+.arbre-archives__chevron { transition: transform 0.15s ease; }
+.arbre-archives[open] .arbre-archives__chevron { transform: rotate(90deg); }
+.arbre-archives__compte { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+@media (pointer: coarse), (max-width: 899px) {
+  .arbre-archives > summary { min-height: var(--cible, 44px); }
+}
+
+.cadenas-arbre {
+  flex: none;
+  color: var(--encre-3);
+  margin-left: 2px;
+}
+
+/* Recherche : filtre « Inclure les archives » et pastille « Archivée » */
+.recherche-archives {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 14px;
+  color: var(--encre-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.recherche-archives input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--bleu);
+}
+
+@media (pointer: coarse), (max-width: 899px) {
+  .recherche-archives { min-height: var(--cible, 44px); }
+}
+
+.pastille-archivee {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--gris-fond);
+  color: var(--gris);
+  font-size: 12.5px;
+  font-weight: 600;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.recherche__filtres {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 14px 4px;
+  border-bottom: 1px solid var(--trait);
+}
+
+/* K11-03 (finale V3) : archive héritée : lien vers la page parente, dessiné comme les boutons du bandeau */
+.bandeau-page a.bouton-lien {
+  display: inline-flex; align-items: center; border: 1px solid currentColor; background: transparent; color: inherit;
+  border-radius: 8px; padding: 6px 12px; font-weight: 600; min-height: 40px; font-size: 15px; text-decoration: none;
+}
+.bandeau-page a.bouton-lien:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (pointer: coarse), (max-width: 899px) {
+  .bandeau-page a.bouton-lien { min-height: var(--cible, 44px); }
+}

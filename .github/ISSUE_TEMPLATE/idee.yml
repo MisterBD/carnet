@@ -1,0 +1,28 @@
+name: Idée ou fonctionnalité
+description: Proposer une amélioration
+labels: ["idée"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Avant de proposer, relis le périmètre dans CONTRIBUTING.md : une personne ou un petit cercle de confiance, des fichiers Markdown comme seule vérité, aucune ressource externe, rien d'exécutable dans les pages.
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Le besoin
+      description: Ce que tu cherches à faire, et pourquoi c'est pénible aujourd'hui.
+    validations:
+      required: true
+  - type: textarea
+    id: idee
+    attributes:
+      label: Ce que tu imagines
+      description: Le comportement voulu. Si possible, comment ça s'écrirait dans le fichier Markdown.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Veux-tu le faire toi-même ?
+      options:
+        - Oui, avec une pull request
+        - Peut-être, si on me guide
+        - Non

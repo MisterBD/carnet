@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Carnet" />
+    <meta name="application-name" content="Carnet" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Carnet : tes pages Markdown, rangées et éditables partout." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icones/icone-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/icones/apple-touch-icon.png" />
+    <!-- Écrans de lancement iPhone (clair et sombre), générés par web/outils-pwa/ecrans-lancement.py. Même fond que
+         l'appli : pas de flash blanc au lancement. iOS les lit à l'ajout à l'écran d'accueil. -->
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1320x2868-clair.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1320x2868-sombre.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1260x2736-clair.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1260x2736-sombre.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1206x2622-clair.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1206x2622-sombre.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1290x2796-clair.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1290x2796-sombre.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1179x2556-clair.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1179x2556-sombre.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1284x2778-clair.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1284x2778-sombre.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1170x2532-clair.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1170x2532-sombre.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1125x2436-clair.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1125x2436-sombre.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1242x2688-clair.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1242x2688-sombre.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-828x1792-clair.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-828x1792-sombre.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1242x2208-clair.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-1242x2208-sombre.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-750x1334-clair.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-750x1334-sombre.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-640x1136-clair.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/lancement/lancement-640x1136-sombre.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait) and (prefers-color-scheme: dark)" />
+    <link rel="preload" href="/polices/atkinson-next.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/polices/literata-opsz.woff2" as="font" type="font/woff2" crossorigin />
+    <title>Carnet</title>
+    <!-- Premier rendu, avant même le CSS de l'appli : le fond du thème existe dès la première image (pas de flash blanc en
+         sombre), et l'amorce reprend l'écran de lancement. React la remplace dès qu'il démarre. -->
+    <style>
+      @font-face { font-family: "Literata"; src: url("/polices/literata-opsz.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+      html { background: #fbfbfa; }
+      body { margin: 0; background: #fbfbfa; }
+      .amorce { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 14px; padding-bottom: 8vh; color: #1c2129; font: 600 22px/1 "Literata", ui-serif, Georgia, serif; }
+      .amorce__sceau { width: 78px; height: 78px; border-radius: 20px; background: #2d4f86; display: grid; place-items: center; }
+      @media (prefers-color-scheme: dark) { html, body { background: #12161c; } .amorce { color: #e5e8ec; } }
+    </style>
+  </head>
+  <body>
+    <div id="racine">
+      <div class="amorce" role="status" aria-label="Chargement de Carnet">
+        <div class="amorce__sceau" aria-hidden="true">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none"><path d="M3 9.5c2.2-3 4.8-3 7 0s4.8 3 7 0 2.8-2.2 4-1.2" stroke="#fff" stroke-width="2.2" stroke-linecap="round" /><path d="M3 15.5c2.2-3 4.8-3 7 0s4.8 3 7 0 2.8-2.2 4-1.2" stroke="#fff" stroke-opacity=".6" stroke-width="2.2" stroke-linecap="round" /></svg>
+        </div>
+        Carnet
+      </div>
+    </div>
+    <noscript><p style="font:16px/1.5 system-ui,sans-serif;padding:24px;text-align:center">Carnet a besoin de JavaScript pour s'afficher.</p></noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

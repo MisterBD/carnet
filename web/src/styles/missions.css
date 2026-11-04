@@ -1,0 +1,761 @@
+/* Carnet · lot 10 « Missions vivantes » : écran Missions, cartes, compteurs, résumé pour Aujourd'hui.
+   Couleurs : jetons de jetons.css uniquement (clair et sombre suivent le système). Cibles tactiles ≥ 44 px. */
+
+/* ---------- Haut de page compact : la première action doit tenir dans l'écran d'un iPhone ---------- */
+.missions.feuille {
+  padding-top: 10px;
+}
+
+@media (min-width: 900px) {
+  .missions.feuille {
+    padding-top: 28px;
+  }
+}
+
+.missions__tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.missions__titre {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 620;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 48;
+}
+
+@media (min-width: 900px) {
+  .missions__titre {
+    font-size: 40px;
+  }
+}
+
+.missions__intro {
+  margin: 4px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--encre-2);
+}
+
+.missions__aide {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--encre-3);
+  max-width: 60ch;
+}
+
+.missions__rien {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--vert-fond);
+  color: var(--vert);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.missions__rien svg {
+  flex: none;
+}
+
+/* ---------- Liaison en direct ---------- */
+.missions__liaison {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 3px 10px 3px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--encre-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.missions__point {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vert);
+  box-shadow: 0 0 0 3px var(--vert-fond);
+}
+
+.missions__liaison[data-etat="perdu"] {
+  background: var(--ambre-fond);
+  color: var(--ambre);
+  font-weight: 600;
+  /* la coupure reste visible pendant qu'on fait défiler les cartes */
+  position: sticky;
+  top: calc(var(--haut-entete) + var(--sa-haut) + 8px);
+  z-index: 5;
+  box-shadow: var(--ombre-1);
+}
+
+.missions__liaison[data-etat="perdu"] .missions__point {
+  background: var(--ambre);
+  box-shadow: none;
+  animation: missions-attente 1.4s ease-in-out infinite;
+}
+
+@keyframes missions-attente {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ---------- Compteurs compacts (pastilles cliquables vers les sections) ---------- */
+.missions__compteurs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.compteur-mission {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--trait);
+  border-radius: 999px;
+  background: var(--feuille);
+  color: var(--encre-2);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+@media (pointer: coarse) {
+  .compteur-mission {
+    min-height: var(--cible);
+    padding: 10px 14px;
+  }
+}
+
+.compteur-mission strong {
+  font-size: 17px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--encre);
+}
+
+.compteur-mission[data-ton="violet"] strong { color: var(--violet); }
+.compteur-mission[data-ton="vert"] strong { color: var(--vert); }
+.compteur-mission[data-ton="bleu"] strong { color: var(--bleu); }
+.compteur-mission[data-ton="gris"] strong { color: var(--gris); }
+
+.compteur-mission[data-vide="true"] {
+  color: var(--encre-3);
+}
+
+.compteur-mission[data-vide="true"] strong {
+  color: var(--encre-3);
+}
+
+@media (hover: hover) {
+  .compteur-mission:hover {
+    border-color: var(--trait-fort);
+    box-shadow: var(--ombre-1);
+  }
+}
+
+/* ---------- Sections ---------- */
+.missions__section {
+  margin-top: 20px;
+  scroll-margin-top: calc(var(--haut-entete) + var(--sa-haut) + 12px);
+}
+
+.missions__section-titre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--encre-3);
+}
+
+.missions__section-titre:focus {
+  outline: none;
+}
+
+.missions__nombre {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.missions__repli > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: var(--cible);
+  margin: 0;
+  padding: 0 4px;
+  border-radius: 10px;
+}
+
+.missions__repli > summary::-webkit-details-marker {
+  display: none;
+}
+
+.missions__repli > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--transition);
+  margin-right: 4px;
+}
+
+.missions__repli[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.missions__repli[open] > summary {
+  margin-bottom: 8px;
+}
+
+@media (hover: hover) {
+  .missions__repli > summary:hover {
+    background: var(--survol);
+  }
+}
+
+.missions__note {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: var(--encre-3);
+}
+
+.missions .etat-vide code {
+  font-family: var(--police-code);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--encre);
+}
+
+/* ---------- Carte ---------- */
+.carte-mission {
+  position: relative;
+  margin-bottom: 10px;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--trait);
+  border-radius: 14px;
+  background: var(--feuille);
+}
+
+.carte-mission[data-anomalie="true"] {
+  border-color: color-mix(in srgb, var(--ambre) 38%, var(--trait));
+}
+
+.carte-mission[data-change="true"] {
+  animation: missions-repere var(--duree-signal) ease-out;
+}
+
+@keyframes missions-repere {
+  0%, 35% {
+    border-color: var(--indigo);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--indigo) 22%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carte-mission[data-change="true"] {
+    animation: none;
+    border-color: var(--indigo);
+  }
+
+  .missions__liaison[data-etat="perdu"] .missions__point {
+    animation: none;
+  }
+}
+
+.carte-mission__haut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.carte-mission__titre {
+  margin: 6px 0 0;
+  font-family: var(--police);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+}
+
+.carte-mission__titre a {
+  color: var(--encre);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .carte-mission__titre a:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--trait-fort);
+    text-underline-offset: 3px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* toute la ligne du titre se touche (≥ 44 px) sans grandir la carte */
+  .carte-mission__titre a {
+    display: flex;
+    align-items: center;
+    min-height: var(--cible);
+    margin: -8px 0 -6px;
+  }
+}
+
+.carte-mission__demande {
+  margin: 4px 0 0;
+  color: var(--encre-2);
+  font-size: 15px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__qui {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--encre-2);
+}
+
+.carte-mission__qui strong {
+  font-weight: 700;
+  color: var(--encre);
+}
+
+.carte-mission__signal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--encre-3);
+}
+
+.carte-mission__signal[data-silence="true"] {
+  color: var(--ambre);
+  font-weight: 600;
+}
+
+.carte-mission__signal svg {
+  flex: none;
+}
+
+.carte-mission__observe {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--encre-3);
+}
+
+.carte-mission .insecable {
+  white-space: nowrap;
+}
+
+.carte-mission__details {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--trait);
+}
+
+.carte-mission__details > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.carte-mission__details dt {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--encre-3);
+}
+
+.carte-mission__details dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--encre);
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__details > div[data-ton="rouge"] dd {
+  color: var(--rouge);
+  font-weight: 600;
+}
+
+.carte-mission__details a {
+  color: var(--indigo);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.carte-mission__details dd.carte-mission__journal {
+  color: var(--encre-2);
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.carte-mission__anomalies {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carte-mission__anomalies li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--ambre-fond);
+  color: var(--ambre);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__anomalies svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---------- Livrables (une ligne de la liste de détails) ---------- */
+.carte-mission__livrables ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.livrable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  font-size: 15px;
+}
+
+.livrable__lien,
+.livrable__absent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.livrable__lien {
+  color: var(--indigo);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .livrable__lien:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+@media (pointer: coarse) {
+  .livrable__lien {
+    min-height: var(--cible);
+  }
+}
+
+.livrable__lien svg,
+.livrable__absent svg {
+  flex: none;
+}
+
+.livrable__nom {
+  overflow-wrap: anywhere;
+}
+
+.livrable__absent {
+  color: var(--encre-3);
+}
+
+.livrable__note {
+  padding: 1px 8px;
+  border: 1px solid var(--trait-fort);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--encre-3);
+  white-space: nowrap;
+}
+
+.livrable[data-alerte="true"] .livrable__absent,
+.livrable[data-alerte="true"] .livrable__note {
+  color: var(--ambre);
+}
+
+.livrable[data-alerte="true"] .livrable__note {
+  border-color: currentColor;
+}
+
+/* ---------- Résultat ---------- */
+.carte-mission__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 14px;
+}
+
+.carte-mission__actions .bouton {
+  min-height: var(--cible);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.carte-mission__livrable {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--encre-3);
+  overflow-wrap: anywhere;
+}
+
+@media (pointer: coarse) {
+  .carte-mission__actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .carte-mission__livrable {
+    text-align: center;
+  }
+}
+
+/* ---------- Résumé (écran Aujourd'hui) ---------- */
+.resume-missions .section-accueil__titre {
+  align-items: center;
+}
+
+.resume-missions__tout {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--indigo);
+  text-decoration: none;
+}
+
+@media (pointer: coarse) {
+  .resume-missions__tout {
+    min-height: var(--cible);
+    font-size: 15px;
+  }
+}
+
+.resume-missions .missions__compteurs {
+  margin: 0 0 12px;
+}
+
+.resume-missions .missions__liaison {
+  margin: 0 0 12px;
+}
+
+.resume-missions__plus {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* ---------- Carte : problème ou résultat, prochain pas, acteur, détails repliés ---------- */
+.carte-mission__nouveau {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--indigo-voile);
+  color: var(--indigo);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.carte-mission__probleme {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--encre);
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__probleme[data-ton="alerte"] {
+  color: var(--ambre);
+  font-weight: 600;
+}
+
+.carte-mission__trouve {
+  margin: 4px 0 0;
+  font-size: 15px;
+  color: var(--encre-2);
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__anomalie {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ambre);
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__anomalie svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.carte-mission__prochain {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--encre);
+  overflow-wrap: anywhere;
+}
+
+.carte-mission__etiquette {
+  margin-right: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--encre-3);
+}
+
+.carte-mission__acteur {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--encre-3);
+}
+
+.carte-mission__acteur strong {
+  font-weight: 700;
+  color: var(--encre-2);
+}
+
+.carte-mission__acteur[data-silence="true"],
+.carte-mission__acteur[data-silence="true"] strong {
+  color: var(--ambre);
+  font-weight: 600;
+}
+
+.carte-mission__acteur svg {
+  flex: none;
+}
+
+.carte-mission__actions {
+  margin-top: 10px;
+}
+
+.carte-mission__plus {
+  margin-top: 6px;
+}
+
+.carte-mission__plus > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--encre-3);
+}
+
+@media (pointer: coarse) {
+  .carte-mission__plus > summary {
+    min-height: var(--cible);
+    margin-bottom: -8px;
+  }
+}
+
+.carte-mission__plus > summary::-webkit-details-marker {
+  display: none;
+}
+
+.carte-mission__plus > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.carte-mission__plus[open] > summary::after {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
+.carte-mission__plus .carte-mission__details {
+  margin-top: 6px;
+}
+
+@media (pointer: coarse) {
+  .carte-mission__plus[open] .carte-mission__details {
+    margin-top: 12px;
+  }
+}

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier Cambouis : tableau de bord (démo)</title>
+<meta name="description" content="Démo d'artefact : fréquentation de l'atelier de réparation de vélos, par mois et par type de panne. Données fictives, aucune ressource externe.">
+<link rel="stylesheet" href="/kit/fonts/fonts.css">
+<style>
+  :root {
+    --fond: #ffffff; --encre: #1b1f27; --doux: #5b6472; --trait: #e3e6ea;
+    --carte: #f6f7f8; --accent: #2b4c7e; --accent-clair: #9db4d8; --ambre: #c27a1a; --vert: #3f7d58;
+    color-scheme: light;
+  }
+  :root[data-theme="sombre"] {
+    --fond: #161b22; --encre: #e6e8eb; --doux: #9aa4b2; --trait: #2a313b;
+    --carte: #1d232c; --accent: #8fb3e8; --accent-clair: #4b6a99; --ambre: #e0a553; --vert: #7cc29a;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="clair"]) {
+      --fond: #161b22; --encre: #e6e8eb; --doux: #9aa4b2; --trait: #2a313b;
+      --carte: #1d232c; --accent: #8fb3e8; --accent-clair: #4b6a99; --ambre: #e0a553; --vert: #7cc29a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fond); color: var(--encre); }
+  body { font: 15px/1.5 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; padding: 20px; }
+  h1 { font: 600 1.5rem/1.2 "Crimson Pro", Georgia, serif; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .sous-titre { color: var(--doux); margin: 0 0 18px; font-size: .9rem; }
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .kpi { background: var(--carte); border-radius: 12px; padding: 12px 14px; }
+  .kpi .val { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .lib { color: var(--doux); font-size: .8rem; }
+  .kpi .delta { font-size: .8rem; font-weight: 500; color: var(--vert); }
+  .grille { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
+  .panneau { border: 1px solid var(--trait); border-radius: 12px; padding: 14px; min-width: 0; }
+  .panneau h2 { font-size: .85rem; color: var(--doux); font-weight: 500; margin: 0 0 10px; }
+  .graph { position: relative; height: 230px; }
+  .barres { display: flex; flex-direction: column; gap: 9px; }
+  .barre { display: grid; grid-template-columns: 8.5em 1fr 2.8em; gap: 8px; align-items: center; font-size: .85rem; }
+  .barre .piste { background: var(--carte); border-radius: 6px; height: 12px; overflow: hidden; }
+  .barre .rempli { background: var(--ambre); height: 100%; border-radius: 6px; }
+  .barre .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--doux); }
+  .pied { color: var(--doux); font-size: .78rem; margin-top: 14px; }
+  @media (max-width: 640px) {
+    body { padding: 14px; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .kpis .kpi:last-child { grid-column: span 2; }
+    .grille { grid-template-columns: 1fr; }
+  }
+  @media print { body { padding: 0; } .panneau { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<h1>Atelier Cambouis</h1>
+<p class="sous-titre">Fréquentation de l'atelier du samedi, mai à octobre. Données fictives.</p>
+
+<div class="kpis">
+  <div class="kpi"><div class="val">58</div><div class="lib">vélos réparés en octobre</div><div class="delta">+12 % sur un an</div></div>
+  <div class="kpi"><div class="val">14</div><div class="lib">bénévoles actifs</div><div class="delta">+3 depuis la rentrée</div></div>
+  <div class="kpi"><div class="val">78 %</div><div class="lib">réparés du premier coup</div><div class="delta">+17 points en six semaines</div></div>
+</div>
+
+<div class="grille">
+  <section class="panneau">
+    <h2>Vélos réparés par mois</h2>
+    <div class="graph"><canvas id="mois" role="img" aria-label="Vélos réparés par mois : 38, 52, 31, 27, 64 et 58 de mai à octobre"></canvas></div>
+  </section>
+  <section class="panneau">
+    <h2>Types de pannes</h2>
+    <div class="graph"><canvas id="pannes" role="img" aria-label="Répartition des pannes : crevaisons 34 %, freins 22 %, transmission 21 %, roues 12 %, autres 11 %"></canvas></div>
+  </section>
+</div>
+
+<section class="panneau" style="margin-top:14px">
+  <h2>Pièces les plus utilisées en octobre</h2>
+  <div class="barres" id="pieces"></div>
+</section>
+
+<p class="pied">Page autonome : aucune requête réseau, aucune donnée stockée dans le navigateur. Les bibliothèques viennent du kit local du serveur d'artefacts.</p>
+
+<script src="/kit/chart.js/chart.umd.min.js"></script>
+<script src="/kit/pont.js"></script>
+<script>
+  // Toutes les données sont dans ce fichier : l'artefact tourne dans un cadre sans réseau.
+  var MOIS = { labels: ["Mai", "Juin", "Juil", "Août", "Sept", "Oct"], valeurs: [38, 52, 31, 27, 64, 58] };
+  var PANNES = { labels: ["Crevaisons", "Freins", "Transmission", "Roues voilées", "Autres"], valeurs: [34, 22, 21, 12, 11] };
+  var PIECES = [["Chambres à air", 41], ["Plaquettes de frein", 23], ["Câbles de frein", 17], ["Chaînes", 12], ["Rayons", 9]];
+
+  var graphes = [];
+
+  function couleur(nom) {
+    return getComputedStyle(document.documentElement).getPropertyValue(nom).trim();
+  }
+
+  function dessiner() {
+    graphes.forEach(function (g) { g.destroy(); });
+    graphes = [];
+    Chart.defaults.font.family = "Roboto, system-ui, sans-serif";
+    Chart.defaults.color = couleur("--doux");
+    Chart.defaults.borderColor = couleur("--trait");
+    graphes.push(new Chart(document.getElementById("mois"), {
+      type: "bar",
+      data: { labels: MOIS.labels, datasets: [{ data: MOIS.valeurs, backgroundColor: couleur("--accent"), borderRadius: 4 }] },
+      options: { maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
+                 scales: { y: { beginAtZero: true, grid: { color: couleur("--trait") } }, x: { grid: { display: false } } } }
+    }));
+    graphes.push(new Chart(document.getElementById("pannes"), {
+      type: "doughnut",
+      data: { labels: PANNES.labels, datasets: [{ data: PANNES.valeurs, borderColor: couleur("--fond"), borderWidth: 2,
+              backgroundColor: [couleur("--accent"), couleur("--ambre"), couleur("--vert"), couleur("--accent-clair"), couleur("--doux")] }] },
+      options: { maintainAspectRatio: false, animation: false, cutout: "58%",
+                 plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, padding: 10 } } } }
+    }));
+  }
+
+  var max = Math.max.apply(null, PIECES.map(function (p) { return p[1]; }));
+  document.getElementById("pieces").innerHTML = PIECES.map(function (p) {
+    return '<div class="barre"><span>' + p[0] + '</span><span class="piste"><span class="rempli" style="display:block;width:' +
+      Math.round(p[1] / max * 100) + '%"></span></span><span class="v">' + p[1] + '</span></div>';
+  }).join("");
+
+  dessiner();
+  // Le pont applique le thème de l'hôte sur <html data-theme> et prévient par un évènement : on redessine les graphiques.
+  window.addEventListener("hote:theme", dessiner);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { setTimeout(dessiner, 0); });
+</script>
+</body>
+</html>

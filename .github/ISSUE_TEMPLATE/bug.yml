@@ -1,0 +1,60 @@
+name: Bug
+description: Quelque chose ne marche pas comme prévu
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler un problème. **Pas de faille de sécurité ici** : voir SECURITY.md (signalement privé).
+        N'inclus ni extrait de tes pages privées, ni jeton, ni secret.
+  - type: textarea
+    id: quoi
+    attributes:
+      label: Ce qui se passe
+      description: Ce que tu vois, et ce que tu attendais.
+    validations:
+      required: true
+  - type: textarea
+    id: etapes
+    attributes:
+      label: Pour reproduire
+      description: Les étapes, de la plus simple. Si possible avec l'espace de démonstration.
+      placeholder: |
+        1. J'ouvre la page « … »
+        2. Je tape `/` puis …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version ou commit
+      placeholder: "ex. a1b2c3d (git rev-parse --short HEAD)"
+    validations:
+      required: true
+  - type: dropdown
+    id: appareil
+    attributes:
+      label: Appareil et navigateur
+      multiple: true
+      options:
+        - Ordinateur, Chrome ou Chromium
+        - Ordinateur, Firefox
+        - Ordinateur, Safari
+        - iPhone ou iPad, Safari
+        - Android, Chrome
+        - Autre (précise dans la description)
+  - type: dropdown
+    id: acces
+    attributes:
+      label: Comment accèdes-tu à Carnet ?
+      options:
+        - Local (127.0.0.1)
+        - Tailscale Serve
+        - Reverse proxy authentifiant
+        - Autre
+  - type: textarea
+    id: journaux
+    attributes:
+      label: Journaux et console
+      description: "`docker compose logs carnet` (le journal ne contient jamais de contenu de page) et la console du navigateur."
+      render: text

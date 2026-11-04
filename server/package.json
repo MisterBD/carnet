@@ -1,0 +1,27 @@
+{
+  "name": "carnet-server",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "Dimitri Foucault",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MisterBD/carnet.git"
+  },
+  "homepage": "https://github.com/MisterBD/carnet#readme",
+  "bugs": {
+    "url": "https://github.com/MisterBD/carnet/issues"
+  },
+  "description": "Carnet : serveur Node 22 (TypeScript exécuté directement) sur un dossier de fichiers .md",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test --test-concurrency=1 tests/*.test.ts"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  }
+}

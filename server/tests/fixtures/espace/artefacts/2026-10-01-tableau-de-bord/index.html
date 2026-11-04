@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau de bord T3 (démo)</title>
+<meta name="description" content="Démo d'artefact : réparations par mois et par service, délai moyen, clients. Données fictives.">
+<style>
+  :root { --fond: #fff; --encre: #1b1f27; --doux: #5b6472; --trait: #e3e6ea; --carte: #f6f7f8; --bleu: #2b4c7e; --vert: #3f7d58; color-scheme: light; }
+  :root[data-theme="sombre"] { --fond: #161b22; --encre: #e6e8eb; --doux: #9aa4b2; --trait: #2a313b; --carte: #1d232c; --bleu: #8fb3e8; --vert: #7cc29a; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--fond); color: var(--encre); }
+  body { font: 15px/1.5 system-ui, sans-serif; padding: 20px; }
+  h1 { font-size: 1.25rem; margin: 0 0 2px; }
+  .sous-titre { color: var(--doux); margin: 0 0 16px; font-size: .9rem; }
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kpi { background: var(--carte); border-radius: 12px; padding: 12px 14px; }
+  .kpi .val { font-size: 1.4rem; font-weight: 650; }
+  .kpi .lib, .kpi .delta { color: var(--doux); font-size: .8rem; }
+  .grille { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+  .panneau { border: 1px solid var(--trait); border-radius: 12px; padding: 14px; min-width: 0; }
+  .panneau h2 { font-size: .85rem; color: var(--doux); font-weight: 600; margin: 0 0 10px; }
+  .barre { display: grid; grid-template-columns: 6em 1fr 2.5em; gap: 8px; align-items: center; font-size: .85rem; margin-bottom: 8px; }
+  .piste { background: var(--carte); border-radius: 6px; height: 12px; overflow: hidden; }
+  .rempli { display: block; background: var(--bleu); height: 100%; }
+  @media (max-width: 640px) { .grille { grid-template-columns: 1fr; } .kpis { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <h1>Tableau de bord T3</h1>
+  <p class="sous-titre">Atelier Cambouis · avril à septembre 2026 · données fictives</p>
+  <section class="kpis" aria-label="Indicateurs clés">
+    <div class="kpi"><div class="lib">Réparations</div><div class="val">1 240</div><div class="delta">+8 % vs T2</div></div>
+    <div class="kpi"><div class="lib">Délai moyen</div><div class="val">3,2 j</div><div class="delta">-0,4 j</div></div>
+    <div class="kpi"><div class="lib">Clients</div><div class="val">310</div><div class="delta">+22</div></div>
+  </section>
+  <div class="grille">
+    <section class="panneau"><h2>Réparations par mois</h2><div id="mois"></div></section>
+    <section class="panneau"><h2>Par service</h2><div id="services"></div></section>
+  </div>
+<script>
+  const MOIS = [["Avr", 118], ["Mai", 124], ["Juin", 139], ["Juil", 120], ["Août", 132], ["Sept", 160]];
+  const SERVICES = [["Révision", 120], ["Freins", 98], ["Crevaison", 64], ["Pneus", 41]];
+  const barres = (el, lignes) => {
+    const max = Math.max(...lignes.map((l) => l[1]));
+    document.getElementById(el).innerHTML = lignes.map(([n, v]) =>
+      `<div class="barre"><span>${n}</span><span class="piste"><span class="rempli" style="width:${(v / max * 100).toFixed(1)}%"></span></span><span>${v}</span></div>`).join("");
+  };
+  barres("mois", MOIS);
+  barres("services", SERVICES);
+  // Pont avec l'hôte : hauteur du contenu et thème
+  const signaler = () => { if (window.parent !== window) window.parent.postMessage({ type: "artefact:hauteur", h: Math.ceil(document.documentElement.scrollHeight) }, "*"); };
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent || !e.data || e.data.type !== "hote:theme") return;
+    document.documentElement.dataset.theme = e.data.theme === "sombre" ? "sombre" : "clair";
+  });
+  new ResizeObserver(signaler).observe(document.body);
+  window.addEventListener("load", signaler);
+</script>
+</body>
+</html>

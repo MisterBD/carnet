@@ -1,0 +1,92 @@
+# Intégration continue : tests du serveur, construction de l'interface, tests du serveur d'artefacts, démarrage Docker.
+# Aucun secret : le workflow n'en lit aucun, n'en écrit aucun et n'a que le droit de lire le dépôt.
+# Les actions sont épinglées par empreinte de commit (la version est en commentaire) ; Dependabot propose les mises à jour.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  serveur:
+    name: Serveur (tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: server
+      - run: npm test
+        working-directory: server
+
+  interface:
+    name: Interface (typage et construction)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+
+  artefacts:
+    name: Serveur d'artefacts (tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m unittest test_unitaires -v
+        working-directory: artefacts/tests
+
+  docker:
+    name: Docker (construction et démarrage)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Préparer .env et la clé de signature
+        run: ./scripts/initialiser.sh
+      - name: Construire et démarrer
+        run: docker compose up -d --build --wait --wait-timeout 120
+      - name: Les deux services répondent
+        run: |
+          curl -fsS http://127.0.0.1:3020/sante
+          curl -fsS http://127.0.0.1:3006/sante
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color --tail 100
+      - name: Arrêter
+        if: always()
+        run: docker compose down -v

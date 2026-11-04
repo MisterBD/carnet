@@ -1,0 +1,66 @@
+/* Lot 6 V3 « Pages » : bouton « Copier » des citations et encadrés, et éditeur en lecture seule (page verrouillée).
+   Le bouton du bloc de code garde le dessin des boutons de code (.carnet-code__bouton). */
+
+.carnet-copier:not(.carnet-code__bouton) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 8px;
+  border: none; border-radius: 7px; background: transparent; color: var(--encre-3);
+  font: inherit; font-size: 13px; font-weight: 600; line-height: 1; cursor: pointer; flex: none;
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.carnet-copier svg { flex: none; pointer-events: none; }
+.carnet-copier__libelle { white-space: nowrap; }
+.carnet-copier:not(.carnet-code__bouton):hover { background: var(--survol); color: var(--encre); }
+.carnet-copier:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+.carnet-copier[data-copie="true"] { color: var(--vert); }
+
+/* Citation : contenu dans un conteneur (vue de nœud), bouton en haut à droite, visible au survol / au clavier. */
+.carnet-pm blockquote.carnet-citation { position: relative; padding-right: 40px; }
+.carnet-citation__contenu > * + * { margin-top: 0.5em; }
+.carnet-citation__outils { position: absolute; top: -3px; right: 0; }
+
+/* Encadré : bouton au bout de la ligne d'en-tête. */
+/* Finale V3 : `.carnet-copier.…` (spécificité) : la règle générale (--encre-3) l'emportait, 4,4:1 sur les fonds sombres
+   des encadrés ; la teinte de l'encadré (comme son titre) reste lisible (AA) en clair et en sombre. */
+.carnet-copier.carnet-encadre__copier { margin-left: auto; color: color-mix(in srgb, var(--c) 70%, var(--encre-3)); }
+.carnet-encadre__copier:hover { background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c); }
+
+/* Bureau à la souris : discret (apparaît au survol du bloc ou quand le bouton a le focus clavier). */
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+  .carnet-citation__copier, .carnet-encadre__copier { opacity: 0; transition: opacity var(--transition); }
+  .carnet-citation:hover .carnet-citation__copier, .carnet-encadre:hover .carnet-encadre__copier,
+  .carnet-citation__copier:focus-visible, .carnet-encadre__copier:focus-visible,
+  .carnet-copier[data-copie="true"] { opacity: 1; }
+}
+
+/* Au doigt ou sur petit écran : toujours visible, cible de 44 px. La citation pose son bouton sous le texte, à
+   droite (pas de texte masqué sur une colonne étroite). */
+@media (pointer: coarse), (max-width: 899px) {
+  .carnet-copier:not(.carnet-code__bouton), .carnet-code__bouton.carnet-code__copier { min-width: 44px; height: 44px; }
+  .carnet-code__bouton.carnet-code__copier { width: auto; }
+  .carnet-pm blockquote.carnet-citation { padding-right: 0; }
+  .carnet-citation__outils { position: static; display: flex; justify-content: flex-end; margin: -4px -6px -10px 0; }
+  .carnet-encadre__copier { margin-top: -7px; margin-bottom: -7px; margin-right: -8px; }
+  /* icône seule : le titre garde la place ; le libellé reste lu par les lecteurs d'écran (« Copié » annoncé) */
+  .carnet-encadre__copier .carnet-copier__libelle {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .carnet-encadre__copier { position: relative; }
+}
+
+/* Impression : pas de bouton. */
+@media print {
+  .carnet-copier { display: none !important; }
+}
+
+/* Lecture seule (page verrouillée) : les commandes qui modifient le document ne réagissent plus ; Copier, Voir en
+   grand, Retour à la ligne et le pli des repliables restent actifs. */
+.carnet-pm[contenteditable="false"] .carnet-encadre__genre,
+.carnet-pm[contenteditable="false"] .carnet-tache__bouton,
+.carnet-pm[contenteditable="false"] .carnet-code__langue { pointer-events: none; cursor: default; }
+.carnet-pm[contenteditable="false"] .carnet-code__langue svg,
+.carnet-pm[contenteditable="false"] .carnet-pastille-ajout,
+.carnet-pm[contenteditable="false"] .carnet-image__outil[aria-label="Remplacer l'image"],
+.carnet-pm[contenteditable="false"] .carnet-image__outil[aria-label="Supprimer l'image"],
+.carnet-pm[contenteditable="false"] .carnet-image__envoyer { display: none; }
+.carnet-pm[contenteditable="false"] button.pastille-tache { pointer-events: none; }
+.carnet-pm[contenteditable="false"] .carnet-encadre__titre { cursor: default; }
