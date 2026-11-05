@@ -20,6 +20,10 @@ cd carnet
 docker compose up -d --build
 ```
 
+Ou en une commande, qui fait la même chose et vérifie au passage Docker et les ports :
+`git clone https://github.com/MisterBD/carnet.git && cd carnet && ./scripts/installer.sh` (autres ports au premier
+lancement : `CARNET_PORT_HOTE=3030 ART_PORT_HOTE=3036 ./scripts/installer.sh`).
+
 Ouvre <http://127.0.0.1:3020>. Tu arrives dans l'espace de démonstration (`./demo`). `initialiser.sh` met `CARNET_DEV=1` dans `.env` : ce mode accepte les requêtes sans identité et **n'est fait que pour l'essai local** (le serveur le refuse dès qu'une origine non locale est déclarée).
 
 Arrêter : `docker compose down`. Voir les journaux (méthode, route, statut, durée, identité ; jamais de contenu) : `docker compose logs -f carnet`.
