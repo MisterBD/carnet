@@ -231,8 +231,15 @@ describe("versions automatiques : réglage CARNET_PAUSE_VERSIONS", () => {
     } finally {
       await b0.fermer();
     }
-    assert.throws(() => lireConfig({ CARNET_ESPACE: os.tmpdir(), CARNET_UTILISATEURS_AUTORISES: "a@b.test", CARNET_PAUSE_VERSIONS: "dix" }), /CARNET_PAUSE_VERSIONS/);
-    assert.throws(() => lireConfig({ CARNET_ESPACE: os.tmpdir(), CARNET_UTILISATEURS_AUTORISES: "a@b.test", CARNET_PAUSE_VERSIONS: "-1" }), /CARNET_PAUSE_VERSIONS/);
-    assert.equal(lireConfig({ CARNET_ESPACE: os.tmpdir(), CARNET_UTILISATEURS_AUTORISES: "a@b.test" }).pauseVersions, 10);
+    // Espace dédié : si l'espace était le dossier temporaire lui-même, l'état par défaut (~/.local/state/carnet) y
+    // tomberait dès que HOME est sous ce dossier (bac à sable : HOME=/tmp), et lireConfig refuserait la configuration.
+    const espaceCfg = fs.mkdtempSync(path.join(os.tmpdir(), "carnet-cfg-"));
+    try {
+      assert.throws(() => lireConfig({ CARNET_ESPACE: espaceCfg, CARNET_UTILISATEURS_AUTORISES: "a@b.test", CARNET_PAUSE_VERSIONS: "dix" }), /CARNET_PAUSE_VERSIONS/);
+      assert.throws(() => lireConfig({ CARNET_ESPACE: espaceCfg, CARNET_UTILISATEURS_AUTORISES: "a@b.test", CARNET_PAUSE_VERSIONS: "-1" }), /CARNET_PAUSE_VERSIONS/);
+      assert.equal(lireConfig({ CARNET_ESPACE: espaceCfg, CARNET_UTILISATEURS_AUTORISES: "a@b.test" }).pauseVersions, 10);
+    } finally {
+      fs.rmSync(espaceCfg, { recursive: true, force: true });
+    }
   });
 });

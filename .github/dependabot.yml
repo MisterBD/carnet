@@ -9,6 +9,11 @@ updates:
     directory: /web
     schedule: { interval: weekly }
     open-pull-requests-limit: 3
+    groups:
+      # Les paquets Tiptap sortent ensemble et s'attendent à la même version exacte : mis à jour un par un, ils
+      # cassent le typage et la construction. Dependabot les propose donc tous dans une seule PR.
+      tiptap:
+        patterns: ["@tiptap/*"]
     ignore:
       # highlight.js suit la plage de lowlight (~11.11.x) : une version mineure seule installerait un second exemplaire.
       # Les correctifs 11.11.x passent toujours ; la mineure suivante viendra avec une nouvelle version de lowlight.
